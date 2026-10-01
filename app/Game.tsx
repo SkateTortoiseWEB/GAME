@@ -136,7 +136,7 @@ export default function Game() {
         setMsg({
           text: r.status === "duplicate" ? `Already have ${r.canonical}`
             : r.status === "late" ? "Too late"
-            : r.status === "error" ? "Couldn't check that one, try again"
+            : r.status === "error" ? (r.detail ? `Checker problem: ${r.detail}` : "Couldn't check that one, try again")
             : "Not on the list",
           ok: false,
         });

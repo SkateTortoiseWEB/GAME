@@ -105,6 +105,8 @@ describe("judgeAnswer (hybrid)", () => {
   });
 
   it("reports error (uncached) when no LLM is configured", async () => {
-    expect((await judgeAnswer(getPrompt("cities:z")!, "zqxyw")).status).toBe("error");
+    const r = await judgeAnswer(getPrompt("cities:z")!, "zqxyw");
+    expect(r.status).toBe("error");
+    expect(r.status === "error" && r.reason).toMatch(/LLM_API_KEY/);
   });
 });

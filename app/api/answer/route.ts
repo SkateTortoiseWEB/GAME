@@ -32,6 +32,11 @@ export async function POST(req: Request) {
   if (result.status === "suggest") {
     return NextResponse.json({ status: "suggest", canonical: result.canonical, count: round.answers.length });
   }
+  if (result.status === "error") {
+    // Spell out the cause while developing; keep it generic in production.
+    const detail = process.env.NODE_ENV === "production" ? undefined : result.reason;
+    return NextResponse.json({ status: "error", detail, count: round.answers.length });
+  }
   if (result.status !== "valid") return NextResponse.json({ status: result.status, count: round.answers.length });
 
   // Re-read in case a parallel request already added answers, then dedupe by normalized name.

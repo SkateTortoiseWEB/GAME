@@ -11,7 +11,7 @@ export type JudgeResult =
   /** Probably a typo: shown to the player, who must resubmit to accept it. */
   | { status: "suggest"; canonical: string }
   | { status: "invalid" }
-  | { status: "error" };
+  | { status: "error"; reason: string };
 
 const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || startsWithLetter(text, prompt.letter);
 
@@ -38,8 +38,9 @@ export async function judgeAnswer(prompt: PromptDef, raw: string): Promise<Judge
   const cached = await store.getVerdict(prompt.id, norm);
   if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, "cache");
 
-  const verdict = await judgeWithLlm(prompt.text, answer);
-  if (!verdict) return { status: "error" };
+  const res = await judgeWithLlm(prompt.text, answer);
+  if (!res.ok) return { status: "error", reason: res.reason };
+  const verdict = res.verdict;
   const ok = verdict.valid && !!verdict.canonical && startsRight(prompt, verdict.canonical);
   const canonical = ok ? verdict.canonical : null;
   await store.setVerdict(prompt.id, norm, { valid: ok, canonical });
