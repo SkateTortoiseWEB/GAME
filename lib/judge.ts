@@ -1,4 +1,5 @@
 import type { PromptDef } from "@/data/prompts";
+import { withLearnedAnswers } from "./learned";
 import { judgeWithLlm } from "./llm";
 import { matchList } from "./match";
 import { normalize } from "./normalize";
@@ -19,7 +20,8 @@ const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || start
  * Hybrid check: curated list -> verdict cache -> LLM (cached, so each answer is judged once).
  * Corrections (typos fixed by fuzzy match or the LLM) are only ever suggested, never auto-accepted.
  */
-export async function judgeAnswer(prompt: PromptDef, raw: string): Promise<JudgeResult> {
+export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<JudgeResult> {
+  const prompt = await withLearnedAnswers(basePrompt);
   const answer = raw.trim().slice(0, 60);
   const norm = normalize(answer);
   if (!norm || norm === normalize(prompt.text)) return { status: "invalid" };

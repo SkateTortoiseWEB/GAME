@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { promptForDate, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
+import { ensureAnswerList } from "@/lib/learned";
 import { finalizeIfDead, standingFor } from "@/lib/run";
 import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
@@ -15,7 +16,9 @@ export async function GET() {
   const session = await loadSession(date, deviceId);
   const score = await finalizeIfDead(session); // a run the player abandoned still ends on schedule
   const dates = await store.scoreDates(deviceId);
-  const { id, text, hint } = promptForDate(date);
+  const prompt = promptForDate(date);
+  const { id, text, hint } = prompt;
+  after(() => ensureAnswerList(prompt)); // build today's answer list in the background if it doesn't exist yet
 
   return NextResponse.json({
     date,

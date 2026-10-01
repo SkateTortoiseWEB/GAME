@@ -45,6 +45,9 @@ export interface Store {
   scoreDates(deviceId: string): Promise<string[]>;
   /** False when this device already has a score for the date. */
   saveScore(s: ScoreRow): Promise<boolean>;
+  /** A prompt's pre-generated answer list (see lib/learned.ts), or null if none has been made yet. */
+  getList(promptId: string): Promise<string[] | null>;
+  setList(promptId: string, answers: string[]): Promise<void>;
   /** How today's finished players compare to a given total. */
   dailyStats(date: string, total: number): Promise<{ below: number; equal: number; count: number }>;
   /** 1-based rank for a device's score on a date (total desc, then survived time desc). */
@@ -59,14 +62,16 @@ export interface Store {
  */
 class MemoryStore implements Store {
   private verdictFile = process.env.VERDICT_FILE || ".data/verdicts.json";
+  private listFile = process.env.LIST_FILE || ".data/lists.json";
   private persist = process.env.NODE_ENV !== "test";
   private writeTimer: ReturnType<typeof setTimeout> | null = null;
-  verdicts = new Map<string, Verdict>(this.load());
+  verdicts = new Map<string, Verdict>(this.load(this.verdictFile));
+  lists = new Map<string, string[]>(this.load(this.listFile));
 
-  private load(): [string, Verdict][] {
+  private load<T>(file: string): [string, T][] {
     if (!this.persist) return [];
     try {
-      return existsSync(this.verdictFile) ? Object.entries(JSON.parse(readFileSync(this.verdictFile, "utf8"))) : [];
+      return existsSync(file) ? Object.entries(JSON.parse(readFileSync(file, "utf8"))) : [];
     } catch {
       return [];
     }
@@ -79,6 +84,7 @@ class MemoryStore implements Store {
       try {
         mkdirSync(dirname(this.verdictFile), { recursive: true });
         writeFileSync(this.verdictFile, JSON.stringify(Object.fromEntries(this.verdicts), null, 1));
+        writeFileSync(this.listFile, JSON.stringify(Object.fromEntries(this.lists), null, 1));
       } catch {
         // Read-only filesystem (some hosts): the in-memory cache still works.
       }
@@ -91,6 +97,11 @@ class MemoryStore implements Store {
   async getVerdict(p: string, n: string) { return this.verdicts.get(`${p}:${n}`) ?? null; }
   async setVerdict(p: string, n: string, v: Verdict) {
     this.verdicts.set(`${p}:${n}`, v);
+    this.save();
+  }
+  async getList(promptId: string) { return this.lists.get(promptId) ?? null; }
+  async setList(promptId: string, answers: string[]) {
+    this.lists.set(promptId, answers);
     this.save();
   }
   async getSession(d: string, id: string) {
@@ -149,6 +160,13 @@ class SupabaseStore implements Store {
   }
   async setVerdict(promptId: string, norm: string, v: Verdict) {
     await this.db.from("verdicts").upsert({ prompt_id: promptId, norm, valid: v.valid, canonical: v.canonical });
+  }
+  async getList(promptId: string) {
+    const { data } = await this.db.from("prompt_lists").select("answers").eq("prompt_id", promptId).maybeSingle();
+    return data ? (data.answers as string[]) : null;
+  }
+  async setList(promptId: string, answers: string[]) {
+    await this.db.from("prompt_lists").upsert({ prompt_id: promptId, answers });
   }
   async getSession(date: string, deviceId: string) {
     const { data } = await this.db.from("sessions").select("run, submitted")

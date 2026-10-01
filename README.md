@@ -16,6 +16,9 @@ clean 21-answers-a-minute player lasts about 3 minutes. The server decides when 
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.
 
 ## How answers are checked (hybrid)
+0. **Pre-generated list** (`lib/learned.ts`): the first visit of the day triggers one LLM call that builds a long list of valid
+   answers for today's prompt (saved in `prompt_lists`, or `.data/lists.json` in dev, and reused whenever that prompt returns).
+   Answers on it are accepted in milliseconds and it powers typo suggestions, so most answers never wait on an LLM.
 1. **Seed list** (`data/prompts.ts`): common answers with aliases, typo suggestions, and no LLM cost. It is only a fast path;
    most valid answers are expected to come from the LLM, so **`LLM_API_KEY` is required for the game to be playable**.
 2. **Verdict cache** (`verdicts` table): an answer judged before is never judged again.

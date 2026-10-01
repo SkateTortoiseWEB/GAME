@@ -69,3 +69,46 @@ function fail(reason: string): LlmResult & { ok: false } {
   console.error(`[llm] ${reason}`);
   return { ok: false, reason };
 }
+
+export type ListResult = { ok: true; answers: string[] } | { ok: false; reason: string };
+
+/**
+ * One call per prompt, ahead of play: ask for a long list of valid answers so that most answers can be
+ * checked locally in microseconds instead of waiting on a per-answer LLM round trip.
+ */
+export async function generateAnswerList(category: string): Promise<ListResult> {
+  const key = process.env.LLM_API_KEY;
+  if (!key) return { ok: false, reason: "LLM_API_KEY is not set" };
+  const base = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const model = process.env.LLM_MODEL || "gpt-5-nano";
+  const effort = process.env.LLM_REASONING_EFFORT || (/^(gpt-5|o\d)/.test(model) ? "minimal" : "");
+  try {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(Number(process.env.LLM_PREWARM_TIMEOUT_MS) || 60000),
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        ...(effort ? { reasoning_effort: effort } : {}),
+        messages: [
+          {
+            role: "system",
+            content:
+              "You build answer lists for a word game. List up to 300 distinct, real, widely recognized answers for the category, " +
+              'honoring every constraint in it (for example "starts with B"). Use each answer\'s commonly used name, with no ' +
+              'explanations and no duplicates. Reply with JSON only: {"answers": ["...", "..."]}.',
+          },
+          { role: "user", content: JSON.stringify({ category }) },
+        ],
+      }),
+    });
+    if (!res.ok) return { ok: false, reason: `${base} returned ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    const data = await res.json();
+    const parsed = JSON.parse(data?.choices?.[0]?.message?.content ?? "");
+    if (!Array.isArray(parsed?.answers)) return { ok: false, reason: "unexpected reply (no answers array)" };
+    return { ok: true, answers: parsed.answers.filter((a: unknown): a is string => typeof a === "string") };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+  }
+}

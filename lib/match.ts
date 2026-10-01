@@ -10,7 +10,8 @@ interface Index {
 const indexes = new Map<string, Index>();
 
 function indexFor(prompt: PromptDef): Index {
-  let idx = indexes.get(prompt.id);
+  const cacheKey = `${prompt.id}#${prompt.answers.length}`; // the answer list can grow (see lib/learned.ts)
+  let idx = indexes.get(cacheKey);
   if (idx) return idx;
   const exact = new Map<string, string>();
   for (const entry of prompt.answers) {
@@ -22,7 +23,7 @@ function indexFor(prompt: PromptDef): Index {
     }
   }
   idx = { exact, keys: [...exact.keys()] };
-  indexes.set(prompt.id, idx);
+  indexes.set(cacheKey, idx);
   return idx;
 }
 

@@ -8,6 +8,13 @@ create table if not exists verdicts (
   primary key (prompt_id, norm)
 );
 
+-- Pre-generated answer list per prompt, made by one LLM call so most answers need no LLM at play time.
+create table if not exists prompt_lists (
+  prompt_id  text primary key,
+  answers    jsonb not null,
+  created_at timestamptz not null default now()
+);
+
 -- In-progress play state, written only by the server so timers can't be faked.
 create table if not exists sessions (
   date       date not null,
@@ -36,5 +43,6 @@ create or replace view all_time_scores as
 
 -- All access goes through the server with the service role key.
 alter table verdicts enable row level security;
+alter table prompt_lists enable row level security;
 alter table sessions enable row level security;
 alter table scores   enable row level security;
