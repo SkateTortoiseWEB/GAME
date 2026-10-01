@@ -1,4 +1,4 @@
-# Listicle
+# Pawmpeii
 
 One prompt a day, the same for everyone. Name as many valid answers as you can while magma rises.
 Each accepted answer adds a stone to your stack. A wrong answer makes the magma surge (typo suggestions and

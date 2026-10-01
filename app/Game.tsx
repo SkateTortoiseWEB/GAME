@@ -363,7 +363,7 @@ export default function Game() {
         <div className="sky-fixed"><SkyCanvas /></div>
         <section className="card card-intro">
           <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
-          <h1 className="title-main">Listicle</h1>
+          <h1 className="title-main">Pawmpeii</h1>
           {today.streak.current > 0 && (
             <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
