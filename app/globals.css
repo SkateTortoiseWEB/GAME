@@ -16,3 +16,4 @@ button { background:var(--ac); color:#2a1a00; border:0; border-radius:10px; padd
 .text.wrong { border-color:var(--bad); color:var(--bad); background:#2a1216; }
 .text.shake { animation: shudder .35s; }
 @keyframes shudder { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-8px); } 40% { transform:translateX(8px); } 60% { transform:translateX(-6px); } 80% { transform:translateX(6px); } }
+.streak { color:var(--ac); font-weight:700; }

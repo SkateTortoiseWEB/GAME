@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import { todayKey } from "@/lib/daily";
-import { anonLabel, DEVICE_RE, loadSession } from "@/lib/session";
+import { getDeviceId } from "@/lib/identity";
+import { anonLabel, loadSession } from "@/lib/session";
+import { computeStreak } from "@/lib/streak";
 import { getStore } from "@/lib/store";
 
 /** Scores come from the server-recorded session, never from the client. */
-export async function POST(req: Request) {
-  const { deviceId } = await req.json().catch(() => ({}));
-  if (!DEVICE_RE.test(deviceId ?? "")) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
-  }
+export async function POST() {
+  const deviceId = await getDeviceId();
   const date = todayKey();
   const store = getStore();
   const existing = await store.getScore(date, deviceId);
-  if (existing) return NextResponse.json({ total: existing.total, perRound: existing.perRound, duplicate: true });
+  if (existing) {
+    const streak = computeStreak(await store.scoreDates(deviceId), date);
+    return NextResponse.json({ total: existing.total, perRound: existing.perRound, streak, duplicate: true });
+  }
 
   const session = await loadSession(date, deviceId);
   const perRound = session.rounds.map((r) => r.answers.length);
@@ -22,5 +24,6 @@ export async function POST(req: Request) {
     session.submitted = true;
     await store.saveSession(session);
   }
-  return NextResponse.json({ total, perRound });
+  const streak = computeStreak(await store.scoreDates(deviceId), date);
+  return NextResponse.json({ total, perRound, streak });
 }

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { GRACE_MS, PROMPTS_PER_DAY, ROUND_SECONDS, todayKey } from "@/lib/daily";
-import { DEVICE_RE, loadSession } from "@/lib/session";
+import { getDeviceId } from "@/lib/identity";
+import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 
 /** Starts a round's server-side timer. Idempotent: a second call returns the original clock. */
 export async function POST(req: Request) {
-  const { deviceId, index } = await req.json().catch(() => ({}));
-  if (!DEVICE_RE.test(deviceId ?? "") || !Number.isInteger(index) || index < 0 || index >= PROMPTS_PER_DAY) {
+  const { index } = await req.json().catch(() => ({}));
+  const deviceId = await getDeviceId();
+  if (!Number.isInteger(index) || index < 0 || index >= PROMPTS_PER_DAY) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
   const date = todayKey();

@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { promptsForDate, GRACE_MS, PROMPTS_PER_DAY, ROUND_SECONDS, todayKey } from "@/lib/daily";
 import { judgeAnswer } from "@/lib/judge";
 import { normalize } from "@/lib/normalize";
-import { DEVICE_RE, loadSession } from "@/lib/session";
+import { getDeviceId } from "@/lib/identity";
+import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 
 export async function POST(req: Request) {
-  const { deviceId, index, answer } = await req.json().catch(() => ({}));
+  const { index, answer } = await req.json().catch(() => ({}));
+  const deviceId = await getDeviceId();
   if (
-    !DEVICE_RE.test(deviceId ?? "") ||
     !Number.isInteger(index) || index < 0 || index >= PROMPTS_PER_DAY ||
     typeof answer !== "string"
   ) {

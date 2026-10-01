@@ -7,6 +7,7 @@ interface Today {
   prompts: { id: string; text: string; hint?: string }[];
   roundSeconds: number;
   submitted: boolean;
+  streak: { current: number; best: number };
   score: { total: number; perRound: number[]; handle: string } | null;
   rounds: { started: boolean; answers: string[] }[];
 }
@@ -16,21 +17,7 @@ type Phase = "loading" | "intro" | "playing" | "between" | "done";
 const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 
-function useDeviceId() {
-  const [id, setId] = useState("");
-  useEffect(() => {
-    let v = localStorage.getItem("ld-device");
-    if (!v) {
-      v = crypto.randomUUID().replace(/-/g, "") + "ld";
-      localStorage.setItem("ld-device", v);
-    }
-    setId(v);
-  }, []);
-  return id;
-}
-
 export default function Game() {
-  const deviceId = useDeviceId();
   const [today, setToday] = useState<Today | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [index, setIndex] = useState(0);
@@ -42,7 +29,7 @@ export default function Game() {
   const [wrong, setWrong] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [msLeft, setMsLeft] = useState(0);
-  const [result, setResult] = useState<{ total: number; perRound: number[] } | null>(null);
+  const [result, setResult] = useState<{ total: number; perRound: number[]; streak?: { current: number; best: number } } | null>(null);
   const [board, setBoard] = useState<{ scope: "daily" | "all"; entries: Entry[]; you: Entry | null } | null>(null);
   const [scope, setScope] = useState<"daily" | "all">("daily");
   const endAt = useRef(0);
@@ -50,33 +37,31 @@ export default function Game() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadBoard = useCallback(async (s: "daily" | "all") => {
-    if (!deviceId) return;
-    const r = await fetch(`/api/leaderboard?scope=${s}&deviceId=${deviceId}`).then((x) => x.json());
+    const r = await fetch(`/api/leaderboard?scope=${s}`).then((x) => x.json());
     setBoard(r);
-  }, [deviceId]);
+  }, []);
 
   useEffect(() => {
-    if (!deviceId) return;
-    fetch(`/api/today?deviceId=${deviceId}`).then((r) => r.json()).then((t: Today) => {
+    fetch("/api/today").then((r) => r.json()).then((t: Today) => {
       setToday(t);
       if (t.submitted && t.score) {
-        setResult({ total: t.score.total, perRound: t.score.perRound });
+        setResult({ total: t.score.total, perRound: t.score.perRound, streak: t.streak });
         setAll(t.rounds.map((r) => r.answers));
         setPhase("done");
       } else {
         setPhase("intro");
       }
     });
-  }, [deviceId]);
+  }, []);
 
   useEffect(() => { if (phase === "done") loadBoard(scope); }, [phase, scope, loadBoard]);
 
   const submit = useCallback(async (finalAll: string[][]) => {
-    const r = await post("/api/submit", { deviceId });
+    const r = await post("/api/submit", {});
     setAll(finalAll);
     setResult(r);
     setPhase("done");
-  }, [deviceId]);
+  }, []);
 
   const finishRound = useCallback(async (i: number, got: string[]) => {
     await queue.current; // let in-flight answers settle
@@ -88,7 +73,7 @@ export default function Game() {
   }, [all, today, submit]);
 
   const startRound = useCallback(async (i: number) => {
-    const r = await post("/api/round", { deviceId, index: i });
+    const r = await post("/api/round", { index: i });
     if (r.error) { setMsg({ text: r.error, ok: false }); return; }
     setIndex(i);
     setAnswers(r.answers ?? []);
@@ -98,7 +83,7 @@ export default function Game() {
     setMsLeft(r.remainingMs);
     setPhase("playing");
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, [deviceId]);
+  }, []);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -122,7 +107,7 @@ export default function Game() {
     if (!text || phase !== "playing" || checking) return;
     setChecking(true);
     queue.current = queue.current.then(async () => {
-      const r = await post("/api/answer", { deviceId, index, answer: text });
+      const r = await post("/api/answer", { index, answer: text });
       if (r.status === "valid") {
         setAnswers((a) => [...a, r.canonical]);
         setMsg({ text: `+1  ${r.canonical}`, ok: true });
@@ -151,6 +136,7 @@ export default function Game() {
   if (phase === "intro") {
     return (
       <section>
+        {today.streak.current > 0 && <p className="streak">🔥 {today.streak.current}-day streak. Play today to keep it going.</p>}
         <p>{today.prompts.length} categories · {today.roundSeconds}s each · 1 point per valid answer · one attempt a day.</p>
         <button onClick={begin}>Start today&apos;s round</button>
         {msg && <p className="bad">{msg.text}</p>}
@@ -193,6 +179,9 @@ export default function Game() {
   return (
     <section>
       <h2>Today: {result?.total ?? 0}</h2>
+      {result?.streak && result.streak.current > 0 && (
+        <p className="streak">🔥 {result.streak.current}-day streak{result.streak.best > result.streak.current ? ` · best ${result.streak.best}` : ""}</p>
+      )}
       <p>{result?.perRound.map((n, i) => <span key={i} className="pill">R{i + 1}: {n}</span>)}</p>
       <p className="hint">Come back tomorrow for five new categories.</p>
       <div className="tabs">

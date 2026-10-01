@@ -38,6 +38,8 @@ export interface Store {
   getSession(date: string, deviceId: string): Promise<Session | null>;
   saveSession(s: Session): Promise<void>;
   getScore(date: string, deviceId: string): Promise<ScoreRow | null>;
+  /** UTC days this device has a finished score, any order. */
+  scoreDates(deviceId: string): Promise<string[]>;
   /** False when this device already has a score for the date. */
   saveScore(s: ScoreRow): Promise<boolean>;
   leaderboard(scope: "daily" | "all", date: string, limit: number): Promise<BoardEntry[]>;
@@ -56,6 +58,7 @@ class MemoryStore implements Store {
   }
   async saveSession(s: Session) { this.sessions.set(`${s.date}:${s.deviceId}`, structuredClone(s)); }
   async getScore(d: string, id: string) { return this.scores.get(`${d}:${id}`) ?? null; }
+  async scoreDates(id: string) { return [...this.scores.values()].filter((s) => s.deviceId === id).map((s) => s.date); }
   async saveScore(s: ScoreRow) {
     const k = `${s.date}:${s.deviceId}`;
     if (this.scores.has(k)) return false;
@@ -102,6 +105,11 @@ class SupabaseStore implements Store {
     return data
       ? { date, deviceId, handle: data.handle as string, total: data.total as number, perRound: data.per_round as number[] }
       : null;
+  }
+  async scoreDates(deviceId: string) {
+    const { data } = await this.db.from("scores").select("date")
+      .eq("device_id", deviceId).order("date", { ascending: false }).limit(1000);
+    return (data ?? []).map((r) => r.date as string);
   }
   async saveScore(s: ScoreRow) {
     const { error } = await this.db.from("scores").insert({

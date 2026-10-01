@@ -22,4 +22,4 @@ Without Supabase env vars it uses an in-memory store (resets on restart). With t
 `supabase/migrations/001_init.sql` first. Without `LLM_API_KEY`, answers off the list are reported as unverifiable.
 
 ## Not done yet
-Real accounts (identity is a device id + handle), rate limiting, rare-answer bonus scoring, more prompts, answer-list promotion of cached LLM verdicts.
+Real accounts (identity is a server-issued cookie, so clearing cookies or private windows resets play and streak), rate limiting, rare-answer bonus scoring, more prompts, answer-list promotion of cached LLM verdicts.
