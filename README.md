@@ -57,7 +57,7 @@ what is left to play. The first visit shows the full rules; later visits show a 
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
 `public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then tense and worried as the lava nears, jumping on an accepted answer (cheering with star eyes for
 rare ones), worried on a wrong one, curious while the AI checks and shy on a typo suggestion. The game-over screen shows love for a great run
-or worry otherwise, and Cinder sleeps on the "see you tomorrow" card.
+or a relieved Cinder otherwise (Cinder never dies; when the lava gets too close it hops to safety), and Cinder sleeps on the "see you tomorrow" card.
 
 ## Rarity colours
 Accepted answers are graded 0-3 for how niche they are, by the same LLM calls that already happen (no extra calls):

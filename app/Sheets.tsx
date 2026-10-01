@@ -52,7 +52,7 @@ export const ReadySheet = memo(function ReadySheet(props: {
       {rulesSeen === false && (
         <p className="rules-text">
           Every answer adds a block and lifts Cinder higher. Wrong answers make the lava surge, and it rises faster the longer you last.
-          When it catches Cinder, this question is done for today.
+          When it gets too close, Cinder hops to safety and this question is done for today.
         </p>
       )}
       {today.genre.main && today.streak.current > 0 && <p className="streak">{today.streak.current} day streak. Finish today to keep it going.</p>}
@@ -114,7 +114,7 @@ export const DoneSheet = memo(function DoneSheet(props: {
 
   return (
     <section className="sheet sheet-done">
-      <p className="sheet-kicker">{today.genre.name}: {proud ? "great run" : "the lava caught Cinder"}</p>
+      <p className="sheet-kicker">{today.genre.name}: {proud ? "great run" : "Cinder hopped to safety"}</p>
       <div className="result-row">
         <span className="result-score">{result.total}</span>
         <span className="result-meta">

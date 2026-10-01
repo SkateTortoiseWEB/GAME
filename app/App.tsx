@@ -385,7 +385,7 @@ export default function App() {
   const playing = phase === "playing";
   const danger = playing && secsToDeath <= 10;
   const mood: Pose = secsToDeath <= 8 ? "worried" : secsToDeath <= 20 ? "tense" : "idle";
-  const pose: Pose = phase === "done" ? (proud ? "love" : "worried") : playing ? (reaction?.pose ?? (slowCheck ? "curious" : mood)) : "idle";
+  const pose: Pose = phase === "done" ? (proud ? "love" : "relax") : playing ? (reaction?.pose ?? (slowCheck ? "curious" : mood)) : "idle";
   const dread = playing ? Math.min(1, Math.max(0, 1 - secsToDeath / 20)) : 0;
   const cam = view.cam;
   const belowScreen = (bottom: number) => bottom + UNIT - cam < 0;
