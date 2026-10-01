@@ -41,6 +41,11 @@ const hms = (ms: number) => {
   return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
 };
 
+/** Cinder the panda. One image per pose in public/panda (made by scripts/slice-panda.py). */
+const POSES = ["idle", "happy", "celebrate", "think", "sad", "scared", "tumble", "ponder", "sulk", "nervous", "scorched", "sleep"] as const;
+type Pose = (typeof POSES)[number];
+const panda = (pose: Pose) => `/panda/${pose}.png`;
+
 const RARITY_LABEL = ["", "RARE", "ULTRA RARE", "INSANELY RARE"];
 /** Shorter than this and the answer was checked locally, so there is nothing to show. */
 const SLOW_CHECK_MS = 150;
@@ -55,6 +60,7 @@ export default function Game() {
   const [result, setResult] = useState<Result | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean; tier?: number; checking?: boolean } | null>(null);
   const [slowCheck, setSlowCheck] = useState(false);
+  const [reaction, setReaction] = useState<{ pose: Pose; ms: number; key: number } | null>(null);
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
   const [wrong, setWrong] = useState(false);
@@ -100,6 +106,16 @@ export default function Game() {
   }, [applyServerState]);
 
   useEffect(() => { loadToday(); }, [loadToday]);
+
+  // Load every pose up front so swapping poses never flickers.
+  useEffect(() => { for (const p of POSES) new Image().src = panda(p); }, []);
+
+  // A reaction (happy, sad, ...) lasts a moment, then Cinder goes back to reacting to the magma.
+  useEffect(() => {
+    if (!reaction) return;
+    const t = setTimeout(() => setReaction(null), reaction.ms);
+    return () => clearTimeout(t);
+  }, [reaction]);
 
   useEffect(() => {
     if (phase !== "done") return;
@@ -199,6 +215,7 @@ export default function Game() {
       if (r.status === "valid") {
         const tier: number = r.rarity ?? 0;
         setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]} • ${r.canonical}` : `+1 • ${r.canonical}`, ok: true, tier });
+        setReaction(tier > 0 ? { pose: "celebrate", ms: 1600, key: Date.now() } : { pose: "happy", ms: 900, key: Date.now() });
         setInput("");
         setWrong(false);
         setSuggestion(null);
@@ -207,6 +224,7 @@ export default function Game() {
         setSuggestion(r.canonical);
         setWrong(false);
         setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept, or keep typing.`, ok: false });
+        setReaction({ pose: "ponder", ms: 1200, key: Date.now() });
       } else if (r.status === "duplicate") {
         setSuggestion(null);
         setMsg({ text: `Already found ${r.canonical}`, ok: false });
@@ -220,6 +238,7 @@ export default function Game() {
       } else {
         setSuggestion(null);
         setMsg({ text: "Not on the list. The magma surges!", ok: false });
+        setReaction({ pose: "sad", ms: 1200, key: Date.now() });
         setWrong(true);
         setShaking(true);
       }
@@ -239,6 +258,9 @@ export default function Game() {
   const secsToDeath = msToDeath / 1000;
   const danger = secsToDeath <= 10;
   const dread = Math.min(1, Math.max(0, 1 - secsToDeath / 20)); // 0 = calm, 1 = about to die
+  // Cinder: a quick reaction to the last answer, else "thinking" while the AI checks, else a mood that follows the magma.
+  const mood: Pose = secsToDeath <= 8 ? "scared" : secsToDeath <= 20 ? "nervous" : "idle";
+  const pose: Pose = reaction?.pose ?? (slowCheck ? "think" : mood);
 
   // Camera: follow the top of the stack so the player stays at a fixed spot on screen.
   const stackPx = FLOOR + s.stack * UNIT;
@@ -261,7 +283,9 @@ export default function Game() {
             </div>
           );
         })}
-        <div className="runner" style={{ bottom: stackPx - cam }} />
+        <div className="panda-wrap" style={{ bottom: stackPx - cam }}>
+          <img key={pose} className={`panda panda-${pose}`} src={panda(pose)} alt="Cinder the panda" draggable={false} />
+        </div>
 
         <div className="scene-magma" style={{ height: magmaPx }} />
         <div className="scene-vignette" />
@@ -302,12 +326,13 @@ export default function Game() {
       <main className="layout-centered">
         <div className="ambient-background" />
         <section className="card card-intro">
+          <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
           <h1 className="title-main">Listicle</h1>
           {today.streak.current > 0 && (
             <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
           <p className="rules-text">
-            <b>One prompt a day.</b> Magma is rising and speeds up the longer you last.
+            <b>One prompt a day.</b> Help Cinder the panda stay ahead of the rising magma. It speeds up the longer you last.
             Every valid answer lifts you higher. A wrong answer makes the magma surge.
             Once it catches you, today is over.
           </p>
@@ -334,7 +359,8 @@ export default function Game() {
       <div className="over-magma" />
       {result && (
         <main className="over-content">
-          <p className="over-kicker">The magma caught you</p>
+          <img className="over-panda" src={panda("scorched")} alt="Cinder, scorched" draggable={false} />
+          <p className="over-kicker">The magma caught Cinder</p>
           <div className="over-score">{result.total}</div>
           <p className="over-sub">{result.total === 1 ? "answer" : "answers"} · survived {clock(result.survivedMs)}</p>
 
@@ -351,6 +377,7 @@ export default function Game() {
           )}
 
           <section className="over-card over-tomorrow">
+            <img className="sleep-panda" src={panda("sleep")} alt="Cinder asleep" draggable={false} />
             <h2>You can play again tomorrow</h2>
             <p className="hint">Today&apos;s run is used. Tomorrow&apos;s prompt unlocks in</p>
             <div className="over-countdown" aria-live="off">{hms(untilTomorrow)}</div>

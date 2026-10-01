@@ -19,6 +19,12 @@ The rules live in `lib/magma.ts` (start height, stone height, rise speed, accele
 clean 21-answers-a-minute player lasts about 3 minutes. The server decides when you are caught from the recorded
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.
 
+## Cinder the panda
+The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
+`public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then nervous and scared as the magma nears,
+happy or celebrating on an accepted answer (celebrating for rare ones), sad on a wrong one, thinking while the AI checks, and scorched on
+the game-over screen.
+
 ## Rarity colours
 Accepted answers are graded 0-3 for how niche they are, by the same LLM calls that already happen (no extra calls):
 the pre-generated list arrives sorted into common / rare / ultra / insane tiers, and a per-answer check returns a
