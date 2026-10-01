@@ -11,7 +11,14 @@ export async function GET(req: Request) {
   const date = todayKey();
   const store = getStore();
   const entries = await store.leaderboard(scope, date, 100);
-  const ranked = entries.map((e, i) => ({ rank: i + 1, handle: e.handle, total: e.total, you: e.deviceId === deviceId }));
+  // Players tied on score (and survival time, for the daily board) share a rank, matching the results screen.
+  let prevRank = 0;
+  const ranked = entries.map((e, i) => {
+    const prev = entries[i - 1];
+    const tied = prev && prev.total === e.total && (scope === "all" || prev.survivedMs === e.survivedMs);
+    prevRank = tied ? prevRank : i + 1;
+    return { rank: prevRank, handle: e.handle, total: e.total, you: e.deviceId === deviceId };
+  });
 
   let you = ranked.find((e) => e.you) ?? null;
   if (!you && scope === "daily") {

@@ -15,7 +15,10 @@ interface Today {
   result: Result | null;
 }
 interface Entry { rank: number; handle: string; total: number; you: boolean }
-type Phase = "loading" | "intro" | "playing" | "done";
+type Phase = "loading" | "ready" | "playing" | "done";
+
+/** Seconds of "get ready" before the run starts by itself. The server clock only starts after it. */
+const GET_READY_SECONDS = 3;
 
 const post = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
@@ -26,6 +29,17 @@ const UNIT = 38;
 const PLAYER_AT = 0.5;
 /** Height of the magma pool visible under the tower from the very start. */
 const FLOOR = 72;
+
+/** Milliseconds until the next UTC midnight, when tomorrow's prompt unlocks. */
+const msUntilTomorrow = (now: number) => {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - now;
+};
+const hms = (ms: number) => {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
+};
 
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
@@ -41,6 +55,8 @@ export default function Game() {
   const [wrong, setWrong] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
+  const [readyIn, setReadyIn] = useState(GET_READY_SECONDS);
+  const [now, setNow] = useState(() => Date.now());
   const [sceneH, setSceneH] = useState(700);
   const [delta, setDelta] = useState<{ text: string; ok: boolean; key: number } | null>(null);
   const [board, setBoard] = useState<{ entries: Entry[]; you: Entry | null } | null>(null);
@@ -70,7 +86,8 @@ export default function Game() {
       applyServerState(d.events, d.elapsedMs);
       setPhase("playing");
     } else {
-      setPhase("intro");
+      setReadyIn(GET_READY_SECONDS);
+      setPhase("ready");
     }
     return d;
   }, [applyServerState]);
@@ -110,13 +127,35 @@ export default function Game() {
     return () => window.removeEventListener("resize", measure);
   }, [phase]);
 
-  async function begin() {
+  const begin = useCallback(async () => {
     const r = await post("/api/run");
     if (r.error) { setMsg({ text: r.error, ok: false }); return; }
     applyServerState(r.events, r.elapsedMs);
     setPhase("playing");
     setTimeout(() => inputRef.current?.focus(), 50);
-  }
+  }, [applyServerState]);
+
+  // No start button: after a short get-ready countdown the run begins by itself.
+  useEffect(() => {
+    if (phase !== "ready") return;
+    if (readyIn <= 0) { begin(); return; }
+    const timer = setTimeout(() => setReadyIn((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [phase, readyIn, begin]);
+
+  // Game-over screen: tick every second and reload when tomorrow's prompt unlocks.
+  useEffect(() => {
+    if (phase !== "done") return;
+    setNow(Date.now()); // don't show the time from page load for the first second
+    const timer = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      if (today && new Date(n).toISOString().slice(0, 10) !== today.date && document.visibilityState === "visible") {
+        window.location.reload(); // midnight UTC passed: tomorrow's prompt is live
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [phase, today]);
 
   function send(e: React.FormEvent) {
     e.preventDefault();
@@ -234,34 +273,52 @@ export default function Game() {
     );
   }
 
-  return (
-    <main className="layout-centered" style={{ "--heat": Math.min(100, s.valid) } as React.CSSProperties}>
-      <div className="ambient-background" />
-
-      {phase === "intro" && (
+  if (phase === "ready") {
+    return (
+      <main className="layout-centered">
+        <div className="ambient-background" />
         <section className="card card-intro">
           <h1 className="title-main">Listicle</h1>
           {today.streak.current > 0 && (
             <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
           <p className="rules-text">
-            <b>One prompt a day.</b> Magma is rising and it speeds up the longer you last.
+            <b>One prompt a day.</b> Magma is rising and speeds up the longer you last.
             Every valid answer lifts you higher. A wrong answer makes the magma surge.
             Once it catches you, today is over.
           </p>
-          <button className="btn-primary btn-large" onClick={begin}>Start today&apos;s run</button>
-          {msg && <p className="msg-bad">{msg.text}</p>}
+          {msg ? <p className="msg-bad">{msg.text}</p> : (
+            <>
+              <div className="ready-count" key={readyIn}>{readyIn > 0 ? readyIn : "Go"}</div>
+              <p className="hint">Get ready…</p>
+            </>
+          )}
         </section>
-      )}
+      </main>
+    );
+  }
 
-      {phase === "done" && result && (
-        <section className="card card-reactive">
-          <header className="results-header">
-            <h1 className="title-small">The magma caught you</h1>
-            <div className="score-massive">{result.total}</div>
-            <p className="hint text-center">answers · survived {clock(result.survivedMs)}</p>
-          </header>
+  // phase === "done": the game-over screen.
+  const answersInOrder = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "");
+  const untilTomorrow = msUntilTomorrow(now);
+  const resetLocal = new Date(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1))
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
+  return (
+    <div className="over">
+      <div className="over-bg" />
+      <div className="over-magma" />
+      {result && (
+        <main className="over-content">
+          <p className="over-kicker">The magma caught you</p>
+          <div className="over-score">{result.total}</div>
+          <p className="over-sub">{result.total === 1 ? "answer" : "answers"} · survived {clock(result.survivedMs)}</p>
+
+          <p className="over-standing">
+            {result.standing.percentile !== null
+              ? <>You outlasted <b>{result.standing.percentile}%</b> of today&apos;s players</>
+              : <>Rank <b>#{result.standing.rank}</b> of {result.standing.players} today</>}
+          </p>
           {today.streak.current > 0 && (
             <div className="streak-summary">
               <span className="fire-icon">🔥</span> {today.streak.current}-Day Streak
@@ -269,32 +326,44 @@ export default function Game() {
             </div>
           )}
 
-          <p className="standing text-center">
-            {result.standing.percentile !== null
-              ? <>You outlasted <b>{result.standing.percentile}%</b> of today&apos;s players</>
-              : <>Rank <b>#{result.standing.rank}</b> of {result.standing.players} today</>}
-          </p>
-          <p className="hint text-center mg-bottom">A new prompt arrives tomorrow.</p>
-          <div className="divider" />
+          <section className="over-card over-tomorrow">
+            <h2>You can play again tomorrow</h2>
+            <p className="hint">Today&apos;s run is used. Tomorrow&apos;s prompt unlocks in</p>
+            <div className="over-countdown" aria-live="off">{hms(untilTomorrow)}</div>
+            <p className="hint">New prompt at midnight UTC ({resetLocal} your time)</p>
+          </section>
 
-          <div className="tabs">
-            <button className={`tab-btn ${scope === "daily" ? "is-active" : ""}`} onClick={() => setScope("daily")}>Today</button>
-            <button className={`tab-btn ${scope === "all" ? "is-active" : ""}`} onClick={() => setScope("all")}>All Time</button>
-          </div>
-          <ol className="board">
-            {board?.entries.map((e) => (
-              <li key={e.rank} className={`board-row ${e.you ? "is-me" : ""}`}>
-                <span className="board-rank">{e.rank}</span>
-                <span className="board-handle">{e.handle} {e.you && "(You)"}</span>
-                <span className="board-score">{e.total}</span>
-              </li>
-            ))}
-          </ol>
-          {board?.you && board.you.rank > 50 && (
-            <div className="rank-outlier">Your rank: <b>#{board.you.rank}</b> ({board.you.total} answers)</div>
-          )}
-        </section>
+          <section className="over-card">
+            <h3 className="over-h">Today&apos;s prompt</h3>
+            <p className="over-prompt">{today.prompt.text}</p>
+            {answersInOrder.length > 0 ? (
+              <ul className="chips">
+                {answersInOrder.map((a, i) => <li key={`${i}-${a}`} className="chip-item">{a}</li>)}
+              </ul>
+            ) : <p className="hint">You didn&apos;t get an answer in this time.</p>}
+          </section>
+
+          <section className="over-card">
+            <h3 className="over-h">Leaderboard</h3>
+            <div className="tabs">
+              <button className={`tab-btn ${scope === "daily" ? "is-active" : ""}`} onClick={() => setScope("daily")}>Today</button>
+              <button className={`tab-btn ${scope === "all" ? "is-active" : ""}`} onClick={() => setScope("all")}>All Time</button>
+            </div>
+            <ol className="board">
+              {board?.entries.map((e) => (
+                <li key={e.rank} className={`board-row ${e.you ? "is-me" : ""}`}>
+                  <span className="board-rank">{e.rank}</span>
+                  <span className="board-handle">{e.handle} {e.you && "(You)"}</span>
+                  <span className="board-score">{e.total}</span>
+                </li>
+              ))}
+            </ol>
+            {board?.you && board.you.rank > 50 && (
+              <div className="rank-outlier">Your rank: <b>#{board.you.rank}</b> ({board.you.total} answers)</div>
+            )}
+          </section>
+        </main>
       )}
-    </main>
+    </div>
   );
 }

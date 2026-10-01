@@ -6,6 +6,11 @@ duplicates cost nothing). The magma speeds up the longer you last, so nobody sur
 you, your day is over. Score = accepted answers, ties broken by survival time. Daily and all-time rankings,
 daily streaks, and a percentile ("you outlasted 71% of players") once 20 players have finished (rank until then).
 
+There is no start button: opening the page shows a 3-second "get ready" countdown and then the run begins by itself
+(the server clock only starts after that, so closing the tab during the countdown costs nothing). When the magma
+catches you the game-over screen shows your result, your answers, the leaderboard, and a countdown to tomorrow's prompt
+(midnight UTC), after which the page reloads into the new day.
+
 The rules live in `lib/magma.ts` (start height, stone height, rise speed, acceleration, surge size). They are tuned so a
 clean 21-answers-a-minute player lasts about 3 minutes. The server decides when you are caught from the recorded
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.
