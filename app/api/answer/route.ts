@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { promptForDate, todayKey } from "@/lib/daily";
+import { isGenre } from "@/lib/genres";
 import { getDeviceId } from "@/lib/identity";
 import { judgeAnswer } from "@/lib/judge";
 import type { RunEvent } from "@/lib/magma";
@@ -9,14 +10,14 @@ import { loadSession } from "@/lib/session";
 import { getStore, type Session } from "@/lib/store";
 
 export async function POST(req: Request) {
-  const { answer } = await req.json().catch(() => ({}));
-  if (typeof answer !== "string") return NextResponse.json({ error: "bad request" }, { status: 400 });
+  const { answer, genre } = await req.json().catch(() => ({}));
+  if (typeof answer !== "string" || !isGenre(genre)) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
   const deviceId = await getDeviceId();
   const date = todayKey();
   const store = getStore();
 
-  const session = await loadSession(date, deviceId);
+  const session = await loadSession(date, genre, deviceId);
   if (await finalizeIfDead(session)) return reply({ status: "dead" }, session, session.events, true);
   if (session.startedAt === null) return NextResponse.json({ error: "run not started" }, { status: 409 });
 
@@ -25,21 +26,21 @@ export async function POST(req: Request) {
 
   // While the AI is being asked the clock stands still: the magma doesn't rise and the player loses nothing.
   let pauseStart = 0;
-  const result = await judgeAnswer(promptForDate(date), answer, {
+  const result = await judgeAnswer(promptForDate(date, genre), answer, {
     beforeAi: async () => {
       pauseStart = Date.now();
-      const s = await loadSession(date, deviceId);
+      const s = await loadSession(date, genre, deviceId);
       s.pausedSince = pauseStart;
       await store.saveSession(s);
     },
     afterAi: async () => {
-      const s = await loadSession(date, deviceId);
+      const s = await loadSession(date, genre, deviceId);
       addPause(s, pauseStart, Date.now());
       await store.saveSession(s);
     },
   });
 
-  const fresh = await loadSession(date, deviceId);
+  const fresh = await loadSession(date, genre, deviceId);
   const answered = (a: string) => fresh.events.some((e) => e.kind === "valid" && normalize(e.answer ?? "") === normalize(a));
 
   if (result.status === "suggest") {

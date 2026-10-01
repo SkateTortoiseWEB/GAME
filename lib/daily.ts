@@ -1,4 +1,5 @@
 import { CATEGORIES, NICHE_PROMPTS, type PromptDef } from "@/data/prompts";
+import { genreById } from "./genres";
 import { eligibleLetters, letterPrompt } from "./prompts";
 
 export function todayKey(now = new Date()): string {
@@ -24,14 +25,18 @@ function mulberry32(seed: number) {
 }
 
 /**
- * One prompt a day, the same for everyone. Players spend minutes on it, so every candidate must have
- * hundreds of valid answers. Two days in three it is a "starts with" prompt, the third a niche one.
+ * One prompt per genre per day, the same for everyone. Players spend minutes on it, so every candidate must have
+ * hundreds of valid answers. In a genre with both kinds, about two days in three it is a "starts with" prompt.
  */
-export function promptForDate(date: string): PromptDef {
-  const rand = mulberry32(hash(date));
-  const dayNumber = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
-  if (dayNumber % 3 === 0) return NICHE_PROMPTS[Math.floor(rand() * NICHE_PROMPTS.length)];
-  const cat = CATEGORIES[Math.floor(rand() * CATEGORIES.length)];
+export function promptForDate(date: string, genreId: string): PromptDef {
+  const genre = genreById(genreId);
+  if (!genre) throw new Error(`unknown genre: ${genreId}`);
+  const rand = mulberry32(hash(`${date}:${genreId}`));
+  const categories = CATEGORIES.filter((c) => genre.categories.includes(c.id));
+  const niche = NICHE_PROMPTS.filter((p) => genre.niche.includes(p.id));
+  const useNiche = categories.length === 0 || (niche.length > 0 && rand() < 0.4);
+  if (useNiche) return niche[Math.floor(rand() * niche.length)];
+  const cat = categories[Math.floor(rand() * categories.length)];
   const letters = eligibleLetters(cat);
   return letterPrompt(cat, letters[Math.floor(rand() * letters.length)]);
 }

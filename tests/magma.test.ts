@@ -71,35 +71,35 @@ describe("finalizing a run (in-memory store)", () => {
   beforeEach(() => { (globalThis as { __store?: unknown }).__store = undefined; });
 
   it("does nothing while the player is alive or hasn't started", async () => {
-    const mk = (startedAt: number | null): Session => ({ date, deviceId: "d".repeat(20), startedAt, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false });
+    const mk = (startedAt: number | null): Session => ({ date, genre: "nature", deviceId: "d".repeat(20), startedAt, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false });
     expect(await finalizeIfDead(mk(null))).toBeNull();
     expect(await finalizeIfDead(mk(Date.now()))).toBeNull();
   });
 
   it("records the score once when the magma has already won, even if the tab was closed", async () => {
     const events: RunEvent[] = [{ t: 3000, kind: "valid", answer: "a" }, { t: 6000, kind: "valid", answer: "b" }];
-    const session: Session = { date, deviceId: "p".repeat(20), startedAt: Date.now() - 10 * 60000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events, submitted: false };
+    const session: Session = { date, genre: "nature", deviceId: "p".repeat(20), startedAt: Date.now() - 10 * 60000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events, submitted: false };
     const first = await finalizeIfDead(session);
     expect(first).toMatchObject({ total: 2 });
     expect(first!.survivedMs).toBeCloseTo(deathTime(events), -1);
     const again = await finalizeIfDead(session);
     expect(again).toEqual(first);
-    expect((await getStore().leaderboard("daily", date, 10))).toHaveLength(1);
+    expect((await getStore().leaderboard("daily", date, "nature", 10))).toHaveLength(1);
   });
 
   it("shows rank until enough players, then a percentile", async () => {
     const store = getStore();
     for (let i = 0; i < 25; i++) {
-      await store.saveScore({ date, deviceId: `player-${String(i).padStart(2, "0")}-xxxxxxxx`, handle: `P${i}`, total: i, survivedMs: 1000 * i });
+      await store.saveScore({ date, genre: "nature", deviceId: `player-${String(i).padStart(2, "0")}-xxxxxxxx`, handle: `P${i}`, total: i, survivedMs: 1000 * i });
     }
-    const top = await standingFor({ date, deviceId: "player-24-xxxxxxxx", handle: "P24", total: 24, survivedMs: 24000 });
+    const top = await standingFor({ date, genre: "nature", deviceId: "player-24-xxxxxxxx", handle: "P24", total: 24, survivedMs: 24000 });
     expect(top.rank).toBe(1);
     expect(top.percentile).toBeGreaterThanOrEqual(95);
 
     (globalThis as { __store?: unknown }).__store = undefined;
     const few = getStore();
-    await few.saveScore({ date, deviceId: "solo-player-xxxxxxxxxx", handle: "S", total: 5, survivedMs: 5000 });
-    const lone = await standingFor({ date, deviceId: "solo-player-xxxxxxxxxx", handle: "S", total: 5, survivedMs: 5000 });
+    await few.saveScore({ date, genre: "nature", deviceId: "solo-player-xxxxxxxxxx", handle: "S", total: 5, survivedMs: 5000 });
+    const lone = await standingFor({ date, genre: "nature", deviceId: "solo-player-xxxxxxxxxx", handle: "S", total: 5, survivedMs: 5000 });
     expect(lone).toEqual({ rank: 1, players: 1, percentile: null });
   });
 });
@@ -112,7 +112,7 @@ describe("streak (unchanged)", () => {
 
 describe("the clock stops while the AI is being asked", () => {
   const base = (over: Partial<Session> = {}): Session => ({
-    date: "2026-10-01", deviceId: "c".repeat(20), startedAt: 1_000_000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false, ...over,
+    date: "2026-10-01", genre: "nature", deviceId: "c".repeat(20), startedAt: 1_000_000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false, ...over,
   });
 
   it("run time is wall time minus the time spent waiting on the AI", () => {

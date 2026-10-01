@@ -43,8 +43,8 @@ describe("prompts", () => {
     expect(new Set(NICHE_PROMPTS.map((p) => p.id)).size).toBe(NICHE_PROMPTS.length);
   });
   it("picks one prompt per date, deterministically, and varies across dates", () => {
-    expect(promptForDate("2026-10-01").id).toBe(promptForDate("2026-10-01").id);
-    const ids = new Set(Array.from({ length: 30 }, (_, i) => promptForDate(`2026-11-${String(i + 1).padStart(2, "0")}`).id));
+    expect(promptForDate("2026-10-01", "nature").id).toBe(promptForDate("2026-10-01", "nature").id);
+    const ids = new Set(Array.from({ length: 30 }, (_, i) => promptForDate(`2026-11-${String(i + 1).padStart(2, "0")}`, "nature").id));
     expect(ids.size).toBeGreaterThan(15);
   });
 });

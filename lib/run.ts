@@ -29,7 +29,7 @@ export function addPause(session: Session, start: number, end: number): void {
  */
 export async function finalizeIfDead(session: Session, now = Date.now()): Promise<ScoreRow | null> {
   const store = getStore();
-  const existing = await store.getScore(session.date, session.deviceId);
+  const existing = await store.getScore(session.date, session.genre, session.deviceId);
   if (existing) return existing;
   if (session.startedAt === null) return null;
   const diedAt = deathTime(session.events);
@@ -37,6 +37,7 @@ export async function finalizeIfDead(session: Session, now = Date.now()): Promis
 
   const row: ScoreRow = {
     date: session.date,
+    genre: session.genre,
     deviceId: session.deviceId,
     handle: anonLabel(session.deviceId),
     total: session.events.filter((e) => e.kind === "valid").length,
@@ -45,7 +46,7 @@ export async function finalizeIfDead(session: Session, now = Date.now()): Promis
   await store.saveScore(row);
   session.submitted = true;
   await store.saveSession(session);
-  return (await store.getScore(session.date, session.deviceId)) ?? row;
+  return (await store.getScore(session.date, session.genre, session.deviceId)) ?? row;
 }
 
 export interface Standing {
@@ -58,8 +59,8 @@ export interface Standing {
 export async function standingFor(score: ScoreRow): Promise<Standing> {
   const store = getStore();
   const [stats, rank] = await Promise.all([
-    store.dailyStats(score.date, score.total),
-    store.rankOf(score.date, score.deviceId),
+    store.dailyStats(score.date, score.genre, score.total),
+    store.rankOf(score.date, score.genre, score.deviceId),
   ]);
   const percentile = stats.count >= MIN_PLAYERS_FOR_PERCENTILE
     ? Math.round(((stats.below + stats.equal / 2) / stats.count) * 100)

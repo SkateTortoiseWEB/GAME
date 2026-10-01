@@ -42,6 +42,7 @@ export const CATEGORIES: Category[] = [
   { id: "verbs", noun: "Verbs", letters: "abcdefghilmnoprstw", answers: [] },
   { id: "jobs", noun: "Jobs", letters: "abcdefghlmnoprst", answers: [] },
   { id: "surnames", noun: "Surnames", letters: "abcdefghjklmnoprstw", answers: [] },
+  { id: "adjectives", noun: "Adjectives", letters: "abcdefghilmnoprstw", answers: [] },
 ];
 
 /** Hand-picked niche prompts. Each must still have hundreds of valid answers; the LLM judges them. */
@@ -63,4 +64,20 @@ export const NICHE_PROMPTS: PromptDef[] = [
   { id: "color-songs", text: "Songs with a color in the title", answers: [] },
   { id: "noun-verbs", text: "Words that are both a noun and a verb", hint: "Like \"run\", \"book\" or \"light\"", answers: [] },
   { id: "savory", text: "Savory foods", hint: "Not desserts", answers: [] },
+  { id: "desserts", text: "Desserts and sweets", answers: [] },
+  { id: "drinks", text: "Drinks", hint: "Hot, cold, fizzy, boozy, anything", answers: [] },
+  { id: "birds", text: "Birds", answers: [] },
+  { id: "flowers", text: "Flowers", answers: [] },
+  { id: "trees", text: "Trees", answers: [] },
+  { id: "insects", text: "Insects and bugs", answers: [] },
+  { id: "rivers", text: "Rivers", hint: "Anywhere in the world", answers: [] },
+  { id: "mountains", text: "Mountains and peaks", hint: "Anywhere in the world", answers: [] },
+  { id: "islands", text: "Islands", hint: "Anywhere in the world", answers: [] },
+  { id: "superheroes", text: "Superheroes and supervillains", answers: [] },
+  { id: "number-songs", text: "Songs with a number in the title", answers: [] },
+  { id: "the-bands", text: "Bands with \"The\" in their name", answers: [] },
+  { id: "pokemon", text: "Pokémon", answers: [] },
+  { id: "video-game-characters", text: "Video game characters", answers: [] },
+  { id: "minecraft", text: "Things in Minecraft", hint: "Blocks, items, mobs, anything", answers: [] },
+  { id: "sports", text: "Sports and physical activities", answers: [] },
 ];

@@ -9,8 +9,8 @@ export function anonLabel(deviceId: string): string {
   return `Player ${h.toString(36).toUpperCase().padStart(4, "0").slice(-4)}`;
 }
 
-export async function loadSession(date: string, deviceId: string): Promise<Session> {
-  const existing = await getStore().getSession(date, deviceId);
+export async function loadSession(date: string, genre: string, deviceId: string): Promise<Session> {
+  const existing = await getStore().getSession(date, genre, deviceId);
   if (existing) return existing;
-  return { date, deviceId, startedAt: null, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false };
+  return { date, genre, deviceId, startedAt: null, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false };
 }

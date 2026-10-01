@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deathTime, MAGMA, stateAt, type RunEvent } from "@/lib/magma";
+import Link from "next/link";
+import { hms, msUntilTomorrow } from "./time";
 import LavaCanvas from "./scene/LavaCanvas";
 import SkyCanvas from "./scene/SkyCanvas";
 import type { SceneState } from "./scene/types";
@@ -10,6 +12,7 @@ interface Standing { rank: number | null; players: number; percentile: number | 
 interface Result { total: number; survivedMs: number; standing: Standing }
 interface Today {
   date: string;
+  genre: { id: string; name: string; emoji: string };
   prompt: { id: string; text: string; hint?: string };
   streak: { current: number; best: number };
   started: boolean;
@@ -33,17 +36,6 @@ const PLAYER_AT = 0.5;
 /** Height of the magma pool visible under the tower from the very start. */
 const FLOOR = 72;
 
-/** Milliseconds until the next UTC midnight, when tomorrow's prompt unlocks. */
-const msUntilTomorrow = (now: number) => {
-  const d = new Date(now);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - now;
-};
-const hms = (ms: number) => {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
-};
-
 /** Cinder the panda. One image per pose in public/panda (made by scripts/slice-panda.py). */
 const POSES = ["idle", "happy", "celebrate", "think", "sad", "scared", "tumble", "ponder", "sulk", "nervous", "scorched", "sleep"] as const;
 type Pose = (typeof POSES)[number];
@@ -55,7 +47,7 @@ const SLOW_CHECK_MS = 150;
 
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
-export default function Game() {
+export default function Game({ genre }: { genre: string }) {
   const [today, setToday] = useState<Today | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [events, setEvents] = useState<RunEvent[]>([]);
@@ -100,7 +92,7 @@ export default function Game() {
   }, []);
 
   const loadToday = useCallback(async () => {
-    const d: Today = await fetch("/api/today").then((r) => r.json());
+    const d: Today = await fetch(`/api/today?genre=${genre}`).then((r) => r.json());
     setToday(d);
     if (d.result) {
       setResult(d.result);
@@ -130,8 +122,8 @@ export default function Game() {
 
   useEffect(() => {
     if (phase !== "done") return;
-    fetch(`/api/leaderboard?scope=${scope}`).then((r) => r.json()).then(setBoard);
-  }, [phase, scope]);
+    fetch(`/api/leaderboard?genre=${genre}&scope=${scope}`).then((r) => r.json()).then(setBoard);
+  }, [phase, scope, genre]);
 
   // Ask the server to confirm the catch; if its clock disagrees, carry on from its state.
   const finish = useCallback(async () => {
@@ -186,7 +178,7 @@ export default function Game() {
   }, [phase]);
 
   const begin = useCallback(async () => {
-    const r = await post("/api/run");
+    const r = await post("/api/run", { genre });
     if (r.error) { setMsg({ text: r.error, ok: false }); return; }
     applyServerState(r.events, r.elapsedMs);
     setPhase("playing");
@@ -230,7 +222,7 @@ export default function Game() {
       frozenAt.current = Date.now();
       let r;
       try {
-        r = await post("/api/answer", { answer: text });
+        r = await post("/api/answer", { genre, answer: text });
       } catch {
         r = { status: "error", detail: "no connection" };
       }
@@ -333,6 +325,7 @@ export default function Game() {
             {delta && <span key={delta.key} className={`hud-delta ${delta.ok ? "delta-up" : "delta-down"}`}>{delta.text}</span>}
           </div>
 
+          <p className="hud-genre">{today.genre.emoji} {today.genre.name}</p>
           <h2 className="hud-prompt">{today.prompt.text}</h2>
           {today.prompt.hint && <p className="hud-hint">{today.prompt.hint}</p>}
 
@@ -362,13 +355,15 @@ export default function Game() {
       <main className="layout-centered">
         <div className="sky-fixed"><SkyCanvas /></div>
         <section className="card card-intro">
+          <Link href="/" className="back-link">← All genres</Link>
           <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
+          <p className="genre-chip">{today.genre.emoji} {today.genre.name}</p>
           <h1 className="title-main">Pawmpeii</h1>
           {today.streak.current > 0 && (
             <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
           <p className="rules-text">
-            <b>One prompt a day.</b> Help Cinder the panda stay ahead of the rising magma. It speeds up the longer you last.
+            <b>One prompt per genre, every day.</b> Help Cinder the panda stay ahead of the rising magma. It speeds up the longer you last.
             Every valid answer lifts you higher. A wrong answer makes the magma surge.
             Once it catches you, today is over.
           </p>
@@ -414,10 +409,11 @@ export default function Game() {
 
           <section className="over-card over-tomorrow">
             <img className="sleep-panda" src={panda("sleep")} alt="Cinder asleep" draggable={false} />
-            <h2>You can play again tomorrow</h2>
-            <p className="hint">Today&apos;s run is used. Tomorrow&apos;s prompt unlocks in</p>
+            <h2>You can play {today.genre.name} again tomorrow</h2>
+            <p className="hint">Today&apos;s {today.genre.name} run is used. Its next prompt unlocks in</p>
             <div className="over-countdown" aria-live="off">{hms(untilTomorrow)}</div>
-            <p className="hint">New prompt at midnight UTC ({resetLocal} your time)</p>
+            <p className="hint">New prompts at midnight UTC ({resetLocal} your time)</p>
+            <Link href="/" className="btn-primary over-more">Play another genre →</Link>
           </section>
 
           <section className="over-card">

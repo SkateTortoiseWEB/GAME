@@ -1,12 +1,16 @@
 # Pawmpeii
 
-One prompt a day, the same for everyone. Name as many valid answers as you can while magma rises.
-Each accepted answer adds a stone to your stack. A wrong answer makes the magma surge (typo suggestions and
-duplicates cost nothing). The magma speeds up the longer you last, so nobody survives forever. Once it catches
-you, your day is over. Score = accepted answers, ties broken by survival time. Daily and all-time rankings,
-daily streaks, and a percentile ("you outlasted 71% of players") once 20 players have finished (rank until then).
+A daily word game with eight **genres** (Animals & Nature, Food & Drink, Places, Movies & TV, Music, Games, Words & Names, Everything Else).
+Every genre has its own prompt each day, the same for everyone, and one run per genre per day. Name as many valid answers as you can while
+magma rises. Each accepted answer adds a stone to your stack. A wrong answer makes the magma surge (typo suggestions and duplicates cost
+nothing). The magma speeds up the longer you last, so nobody survives forever. Once it catches you, that genre is over for the day. Score =
+accepted answers, ties broken by survival time. Each genre has its own daily and all-time leaderboard and its own "you outlasted X% of
+players" (rank until 20 players have finished). The streak counts a day if you finish a run in any genre.
 
-There is no start button: opening the page shows a 3-second "get ready" countdown and then the run begins by itself
+Genres live in `lib/genres.ts`: each lists the categories (which spawn "X that start with Y" prompts) and niche prompts it draws from,
+and `promptForDate(date, genre)` picks one deterministically. Every prompt must have hundreds of valid answers.
+
+There is no start button inside a genre: tapping a genre card on the home screen opens `/play/<genre>`, which shows a 3-second "get ready" countdown and then the run begins by itself
 (the server clock only starts after that, so closing the tab during the countdown costs nothing). When the magma
 catches you the game-over screen shows your result, your answers, the leaderboard, and a countdown to tomorrow's prompt
 (midnight UTC), after which the page reloads into the new day.
