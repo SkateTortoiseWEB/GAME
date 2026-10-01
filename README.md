@@ -44,9 +44,9 @@ genre shows the full rules; later visits show a one-liner. Opening the home scre
 
 ## Cinder the panda
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
-`public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then nervous and scared as the magma nears,
-happy or celebrating on an accepted answer (celebrating for rare ones), sad on a wrong one, thinking while the AI checks, and scorched on
-the game-over screen.
+`public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then tense and worried as the lava nears, jumping on an accepted answer (cheering with star eyes for
+rare ones), worried on a wrong one, curious while the AI checks and shy on a typo suggestion. The game-over screen shows love for a great run
+or worry otherwise, and Cinder sleeps on the "see you tomorrow" card.
 
 ## Rarity colours
 Accepted answers are graded 0-3 for how niche they are, by the same LLM calls that already happen (no extra calls):
