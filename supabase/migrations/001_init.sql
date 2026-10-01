@@ -12,7 +12,7 @@ create table if not exists verdicts (
 create table if not exists sessions (
   date       date not null,
   device_id  text not null,
-  rounds     jsonb not null,
+  run        jsonb not null,
   submitted  boolean not null default false,
   primary key (date, device_id)
 );
@@ -23,7 +23,7 @@ create table if not exists scores (
   device_id  text not null,
   handle     text not null,
   total      int  not null,
-  per_round  jsonb not null,
+  survived_ms int not null default 0,
   created_at timestamptz not null default now(),
   primary key (date, device_id)
 );

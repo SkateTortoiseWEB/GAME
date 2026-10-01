@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { matchList } from "@/lib/match";
 import { normalize } from "@/lib/normalize";
-import { BONUS_SECONDS, promptsForDate, PROMPTS_PER_DAY, roundDeadline, START_SECONDS } from "@/lib/daily";
+import { promptForDate } from "@/lib/daily";
 import { eligibleLetters, getPrompt, startsWithLetter } from "@/lib/prompts";
 import { CATEGORIES, NICHE_PROMPTS } from "@/data/prompts";
 import { judgeAnswer } from "@/lib/judge";
@@ -42,22 +42,10 @@ describe("prompts", () => {
     for (const c of CATEGORIES) expect(eligibleLetters(c).length, c.id).toBeGreaterThanOrEqual(10);
     expect(new Set(NICHE_PROMPTS.map((p) => p.id)).size).toBe(NICHE_PROMPTS.length);
   });
-  it("is deterministic per date: 3 letter prompts + 2 niche, all different", () => {
-    const a = promptsForDate("2026-10-01");
-    expect(a.map((p) => p.id)).toEqual(promptsForDate("2026-10-01").map((p) => p.id));
-    expect(a).toHaveLength(PROMPTS_PER_DAY);
-    expect(a.filter((p) => p.letter)).toHaveLength(3);
-    expect(new Set(a.map((p) => p.id.split(":")[0])).size).toBe(5);
-    expect(a.map((p) => p.id)).not.toEqual(promptsForDate("2026-10-02").map((p) => p.id));
-  });
-});
-
-describe("round clock", () => {
-  it("starts at 25s and adds 7s per accepted answer", () => {
-    expect(START_SECONDS).toBe(25);
-    expect(BONUS_SECONDS).toBe(7);
-    expect(roundDeadline(1000, 0)).toBe(1000 + 25000);
-    expect(roundDeadline(1000, 3)).toBe(1000 + 46000);
+  it("picks one prompt per date, deterministically, and varies across dates", () => {
+    expect(promptForDate("2026-10-01").id).toBe(promptForDate("2026-10-01").id);
+    const ids = new Set(Array.from({ length: 30 }, (_, i) => promptForDate(`2026-11-${String(i + 1).padStart(2, "0")}`).id));
+    expect(ids.size).toBeGreaterThan(15);
   });
 });
 

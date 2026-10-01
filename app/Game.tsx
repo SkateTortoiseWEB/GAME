@@ -1,111 +1,103 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { deathTime, stateAt, type RunEvent } from "@/lib/magma";
 
+interface Standing { rank: number | null; players: number; percentile: number | null }
+interface Result { total: number; survivedMs: number; standing: Standing }
 interface Today {
   date: string;
-  prompts: { id: string; text: string; hint?: string }[];
-  startSeconds: number;
-  bonusSeconds: number;
-  submitted: boolean;
+  prompt: { id: string; text: string; hint?: string };
   streak: { current: number; best: number };
-  score: { total: number; perRound: number[]; handle: string } | null;
-  rounds: { started: boolean; answers: string[] }[];
+  started: boolean;
+  elapsedMs: number;
+  events: RunEvent[];
+  result: Result | null;
 }
 interface Entry { rank: number; handle: string; total: number; you: boolean }
-type Phase = "loading" | "intro" | "playing" | "between" | "done";
+type Phase = "loading" | "intro" | "playing" | "done";
 
-const post = (url: string, body: unknown) =>
+const post = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+
+const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 export default function Game() {
   const [today, setToday] = useState<Today | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
-  const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [all, setAll] = useState<string[][]>([]);
+  const [events, setEvents] = useState<RunEvent[]>([]);
+  const [t, setT] = useState(0); // ms since the run started, per the server's clock
+  const [result, setResult] = useState<Result | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
   const [wrong, setWrong] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
-  const [msLeft, setMsLeft] = useState(0);
-  const [result, setResult] = useState<{ total: number; perRound: number[]; streak?: { current: number; best: number } } | null>(null);
-  const [board, setBoard] = useState<{ scope: "daily" | "all"; entries: Entry[]; you: Entry | null } | null>(null);
+  const [board, setBoard] = useState<{ entries: Entry[]; you: Entry | null } | null>(null);
   const [scope, setScope] = useState<"daily" | "all">("daily");
-  const endAt = useRef(0);
+  const anchor = useRef(0); // Date.now() minus elapsed run time
+  const eventsRef = useRef<RunEvent[]>([]);
+  const finishing = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const loadBoard = useCallback(async (s: "daily" | "all") => {
-    const r = await fetch(`/api/leaderboard?scope=${s}`).then((x) => x.json());
-    setBoard(r);
+  const applyServerState = useCallback((evs: RunEvent[], elapsedMs: number) => {
+    eventsRef.current = evs;
+    setEvents(evs);
+    anchor.current = Date.now() - elapsedMs;
+    setT(elapsedMs);
   }, []);
+
+  const loadToday = useCallback(async () => {
+    const d: Today = await fetch("/api/today").then((r) => r.json());
+    setToday(d);
+    if (d.result) {
+      setResult(d.result);
+      setEvents(d.events);
+      setPhase("done");
+    } else if (d.started) {
+      applyServerState(d.events, d.elapsedMs);
+      setPhase("playing");
+    } else {
+      setPhase("intro");
+    }
+    return d;
+  }, [applyServerState]);
+
+  useEffect(() => { loadToday(); }, [loadToday]);
 
   useEffect(() => {
-    fetch("/api/today").then((r) => r.json()).then((t: Today) => {
-      setToday(t);
-      if (t.submitted && t.score) {
-        setResult({ total: t.score.total, perRound: t.score.perRound, streak: t.streak });
-        setAll(t.rounds.map((r) => r.answers));
-        setPhase("done");
-      } else {
-        setPhase("intro");
-      }
-    });
-  }, []);
+    if (phase !== "done") return;
+    fetch(`/api/leaderboard?scope=${scope}`).then((r) => r.json()).then(setBoard);
+  }, [phase, scope]);
 
-  useEffect(() => { if (phase === "done") loadBoard(scope); }, [phase, scope, loadBoard]);
-
-  const submit = useCallback(async (finalAll: string[][]) => {
-    const r = await post("/api/submit", {});
-    setAll(finalAll);
-    setResult(r);
-    setPhase("done");
-  }, []);
-
-  const finishRound = useCallback(async (i: number, got: string[]) => {
-    await queue.current; 
-    const next = [...all];
-    next[i] = got;
-    setAll(next);
-    if (i + 1 >= (today?.prompts.length ?? 0)) await submit(next);
-    else setPhase("between");
-  }, [all, today, submit]);
-
-  const startRound = useCallback(async (i: number) => {
-    const r = await post("/api/round", { index: i });
-    if (r.error) { setMsg({ text: r.error, ok: false }); return; }
-    setIndex(i);
-    setAnswers(r.answers ?? []);
-    setInput("");
-    setMsg(null);
-    endAt.current = Date.now() + r.remainingMs;
-    setMsLeft(r.remainingMs);
-    setPhase("playing");
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
+  // Ask the server to confirm the catch; if its clock disagrees, carry on from its state.
+  const finish = useCallback(async () => {
+    if (finishing.current) return;
+    finishing.current = true;
+    await queue.current;
+    const d = await loadToday();
+    finishing.current = false;
+    return d;
+  }, [loadToday]);
 
   useEffect(() => {
     if (phase !== "playing") return;
-    const t = setInterval(() => {
-      const left = Math.max(0, endAt.current - Date.now());
-      setMsLeft(left);
-      if (left === 0) { clearInterval(t); finishRound(index, answers); }
-    }, 100);
-    return () => clearInterval(t);
-  }, [phase, index, answers, finishRound]);
+    const timer = setInterval(() => {
+      const now = Date.now() - anchor.current;
+      setT(now);
+      if (deathTime(eventsRef.current) <= now) finish();
+    }, 50);
+    return () => clearInterval(timer);
+  }, [phase, finish]);
 
-  useEffect(() => {
-    if (phase !== "between") return;
-    const t = setTimeout(() => startRound(index + 1), 1500);
-    return () => clearTimeout(t);
-  }, [phase, index, startRound]);
-
-  function begin() {
-    const lastStarted = today ? today.rounds.map((r) => r.started).lastIndexOf(true) : -1;
-    startRound(Math.max(0, lastStarted));
+  async function begin() {
+    const r = await post("/api/run");
+    if (r.error) { setMsg({ text: r.error, ok: false }); return; }
+    applyServerState(r.events, r.elapsedMs);
+    setPhase("playing");
+    setTimeout(() => inputRef.current?.focus(), 50);
   }
 
   function send(e: React.FormEvent) {
@@ -114,27 +106,32 @@ export default function Game() {
     if (!text || phase !== "playing" || checking) return;
     setChecking(true);
     queue.current = queue.current.then(async () => {
-      const r = await post("/api/answer", { index, answer: text });
+      const r = await post("/api/answer", { answer: text });
+      if (r.events) applyServerState(r.events, r.elapsedMs);
+      if (r.dead || r.status === "dead") { setChecking(false); finish(); return; }
       if (r.status === "valid") {
-        setAnswers((a) => [r.canonical, ...a]); 
-        endAt.current += today!.bonusSeconds * 1000; 
-        setMsg({ text: `+${today!.bonusSeconds}s • ${r.canonical}`, ok: true });
+        setMsg({ text: `+1 • ${r.canonical}`, ok: true });
         setInput("");
         setWrong(false);
         setSuggestion(null);
       } else if (r.status === "suggest") {
+        // A fixed typo is only offered, never accepted, and costs nothing.
         setSuggestion(r.canonical);
         setWrong(false);
         setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept, or keep typing.`, ok: false });
+      } else if (r.status === "duplicate") {
+        setSuggestion(null);
+        setMsg({ text: `Already found ${r.canonical}`, ok: false });
+        setWrong(true);
+        setShaking(true);
+      } else if (r.status === "error") {
+        setSuggestion(null);
+        setMsg({ text: r.detail ? `Checker problem: ${r.detail}` : "Couldn't check that one, try again.", ok: false });
+        setWrong(true);
+        setShaking(true);
       } else {
         setSuggestion(null);
-        setMsg({
-          text: r.status === "duplicate" ? `Already found ${r.canonical}`
-            : r.status === "late" ? "Time's up!"
-            : r.status === "error" ? (r.detail ? `Error: ${r.detail}` : "Couldn't check, try again.")
-            : "Not on the list.",
-          ok: false,
-        });
+        setMsg({ text: "Not on the list. The magma surges!", ok: false });
         setWrong(true);
         setShaking(true);
       }
@@ -143,142 +140,106 @@ export default function Game() {
     });
   }
 
-  // Calculate cumulative score to drive the visual "heat" of the environment
-  let currentScore = 0;
-  if (phase === "playing") {
-    currentScore = all.slice(0, index).reduce((t, a) => t + (a?.length ?? 0), 0) + answers.length;
-  } else if (phase === "between") {
-    currentScore = all.slice(0, index + 1).reduce((t, a) => t + (a?.length ?? 0), 0);
-  } else if (phase === "done") {
-    currentScore = result?.total ?? 0;
-  }
-  const heat = Math.min(100, currentScore); // Capped for predictable CSS math
-
   if (phase === "loading" || !today) {
-    return (
-      <main className="layout-centered">
-        <div className="loader"></div>
-      </main>
-    );
+    return <main className="layout-centered"><div className="loader" /></main>;
   }
 
-  const prompt = today.prompts[index];
+  const s = stateAt(events, t);
+  const answers = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "").reverse();
+  const heat = Math.min(100, s.valid);
+  const viewMax = Math.max(24, s.stack + 6);
+  const danger = s.margin <= 3;
 
   return (
-    <main 
-      className={phase === "intro" || phase === "between" ? "layout-centered" : "layout-top"} 
-      style={{ "--heat": heat } as React.CSSProperties}
-    >
-      {/* The ambient background scales in intensity based on the --heat variable */}
+    <main className={phase === "playing" ? "layout-top" : "layout-centered"} style={{ "--heat": heat } as React.CSSProperties}>
       <div className="ambient-background" />
 
       {phase === "intro" && (
         <section className="card card-intro">
           <h1 className="title-main">Listicle</h1>
           {today.streak.current > 0 && (
-            <div className="streak-badge">
-              <span className="fire-icon">🔥</span> {today.streak.current}-Day Streak
-            </div>
+            <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
           <p className="rules-text">
-            <b>{today.prompts.length} categories.</b> {today.startSeconds} seconds to start. 
-            Every valid answer earns 1 point and adds {today.bonusSeconds} seconds to the clock. 
-            One attempt per day.
+            <b>One prompt a day.</b> Magma is rising and it speeds up the longer you last.
+            Every valid answer lifts you higher. A wrong answer makes the magma surge.
+            Once it catches you, today is over.
           </p>
-          <button className="btn-primary btn-large" onClick={begin}>Play Today&apos;s Game</button>
+          <button className="btn-primary btn-large" onClick={begin}>Start today&apos;s run</button>
           {msg && <p className="msg-bad">{msg.text}</p>}
-        </section>
-      )}
-
-      {phase === "between" && (
-        <section className="card card-reactive card-center fade-in">
-          <h2 className="round-tally">Round {index + 1} Complete</h2>
-          <p className="round-found"><b>{all[index]?.length ?? 0}</b> words found</p>
-          <div className="divider"></div>
-          <p className="total-running">Total Score: <b>{currentScore}</b></p>
-          <p className="hint pulse">Preparing next category...</p>
         </section>
       )}
 
       {phase === "playing" && (
         <section className="card card-reactive">
           <header className="play-header">
-            <div className="round-indicator">Round {index + 1} / {today.prompts.length}</div>
-            <div className={`timer ${Math.ceil(msLeft / 1000) <= 10 ? "timer-danger" : ""}`}>{Math.ceil(msLeft / 1000)}s</div>
+            <div className="round-indicator">Survived</div>
+            <div className={`timer ${danger ? "timer-danger" : ""}`}>{clock(t)}</div>
           </header>
-          
-          <div className="progress-track">
-            <div 
-              className={`progress-fill ${Math.ceil(msLeft / 1000) <= 10 ? "fill-danger" : ""}`} 
-              style={{ width: `${Math.min(100, (msLeft / (today.startSeconds * 1000)) * 100)}%` }} 
-            />
+
+          {/* Placeholder scene: the magma level, the stack of stones, and the player on top. */}
+          <div className={`arena ${danger ? "arena-danger" : ""}`} aria-label={`Magma level ${s.level.toFixed(1)}, your height ${s.stack}`}>
+            <div className="arena-stack" style={{ height: `${(s.stack / viewMax) * 100}%` }} />
+            <div className="arena-runner" style={{ bottom: `${(s.stack / viewMax) * 100}%` }} />
+            <div className="arena-magma" style={{ height: `${Math.min(100, (s.level / viewMax) * 100)}%` }} />
           </div>
 
           <div className="prompt-area">
-            <h2 className="prompt-text">{prompt.text}</h2>
-            {prompt.hint && <p className="prompt-hint">{prompt.hint}</p>}
+            <h2 className="prompt-text">{today.prompt.text}</h2>
+            {today.prompt.hint && <p className="prompt-hint">{today.prompt.hint}</p>}
           </div>
 
           <form onSubmit={send} className="input-form">
-            <input 
-              ref={inputRef} 
+            <input
+              ref={inputRef}
               className={`input-box ${wrong ? "is-wrong" : ""} ${suggestion ? "is-suggest" : ""} ${shaking ? "is-shaking" : ""}`}
-              value={input} 
+              value={input}
               onChange={(e) => { setInput(e.target.value); setWrong(false); setSuggestion(null); setMsg(null); }}
               onAnimationEnd={() => setShaking(false)}
-              autoComplete="off" 
-              autoCapitalize="off" 
-              placeholder="Type an answer..." 
+              autoComplete="off"
+              autoCapitalize="off"
+              placeholder="Type an answer..."
             />
           </form>
 
           <div className="feedback-area" aria-live="polite">
-            <span className={`msg-text ${msg?.ok ? "msg-ok" : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>
-              {msg?.text ?? " "}
-            </span>
+            <span className={`msg-text ${msg?.ok ? "msg-ok" : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
           </div>
-          
-          <div className="answers-header">
-            <span className="answers-count"><b>{answers.length}</b> accepted</span>
-          </div>
-          
+
+          <div className="answers-header"><span className="answers-count"><b>{s.valid}</b> accepted</span></div>
           <ul className="chips">
             {answers.map((a) => <li key={a} className="chip-item pop-in">{a}</li>)}
           </ul>
         </section>
       )}
 
-      {phase === "done" && (
+      {phase === "done" && result && (
         <section className="card card-reactive">
           <header className="results-header">
-            <h1 className="title-small">Final Score</h1>
-            <div className="score-massive">{result?.total ?? 0}</div>
+            <h1 className="title-small">The magma caught you</h1>
+            <div className="score-massive">{result.total}</div>
+            <p className="hint text-center">answers · survived {clock(result.survivedMs)}</p>
           </header>
 
-          {result?.streak && result.streak.current > 0 && (
+          {today.streak.current > 0 && (
             <div className="streak-summary">
-              <span className="fire-icon">🔥</span> {result.streak.current}-Day Streak 
-              {result.streak.best > result.streak.current ? <span className="streak-best">(Best: {result.streak.best})</span> : ""}
+              <span className="fire-icon">🔥</span> {today.streak.current}-Day Streak
+              {today.streak.best > today.streak.current ? <span className="streak-best">(Best: {today.streak.best})</span> : ""}
             </div>
           )}
 
-          <div className="round-pills">
-            {result?.perRound.map((n, i) => (
-              <div key={i} className="pill">
-                <span className="pill-label">R{i + 1}</span>
-                <span className="pill-val">{n}</span>
-              </div>
-            ))}
-          </div>
-          
-          <p className="hint text-center mg-bottom">New prompts arrive tomorrow.</p>
-          <div className="divider"></div>
+          <p className="standing text-center">
+            {result.standing.percentile !== null
+              ? <>You outlasted <b>{result.standing.percentile}%</b> of today&apos;s players</>
+              : <>Rank <b>#{result.standing.rank}</b> of {result.standing.players} today</>}
+          </p>
+          <p className="hint text-center mg-bottom">A new prompt arrives tomorrow.</p>
+          <div className="divider" />
 
           <div className="tabs">
             <button className={`tab-btn ${scope === "daily" ? "is-active" : ""}`} onClick={() => setScope("daily")}>Today</button>
             <button className={`tab-btn ${scope === "all" ? "is-active" : ""}`} onClick={() => setScope("all")}>All Time</button>
           </div>
-
           <ol className="board">
             {board?.entries.map((e) => (
               <li key={e.rank} className={`board-row ${e.you ? "is-me" : ""}`}>
@@ -288,11 +249,8 @@ export default function Game() {
               </li>
             ))}
           </ol>
-          
           {board?.you && board.you.rank > 50 && (
-            <div className="rank-outlier">
-              Your rank: <b>#{board.you.rank}</b> ({board.you.total} pts)
-            </div>
+            <div className="rank-outlier">Your rank: <b>#{board.you.rank}</b> ({board.you.total} answers)</div>
           )}
         </section>
       )}

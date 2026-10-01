@@ -1,32 +1,29 @@
 import { NextResponse } from "next/server";
-import { BONUS_SECONDS, promptsForDate, START_SECONDS, todayKey } from "@/lib/daily";
+import { promptForDate, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
+import { finalizeIfDead, standingFor } from "@/lib/run";
 import { loadSession } from "@/lib/session";
-import { computeStreak } from "@/lib/streak";
 import { getStore } from "@/lib/store";
+import { computeStreak } from "@/lib/streak";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const deviceId = await getDeviceId();
-
   const date = todayKey();
-  const prompts = promptsForDate(date).map(({ id, text, hint }) => ({ id, text, hint }));
   const store = getStore();
-  const [session, score, dates] = await Promise.all([
-    loadSession(date, deviceId),
-    store.getScore(date, deviceId),
-    store.scoreDates(deviceId),
-  ]);
+  const session = await loadSession(date, deviceId);
+  const score = await finalizeIfDead(session); // a run the player abandoned still ends on schedule
+  const dates = await store.scoreDates(deviceId);
+  const { id, text, hint } = promptForDate(date);
+
   return NextResponse.json({
     date,
-    prompts,
-    startSeconds: START_SECONDS,
-    bonusSeconds: BONUS_SECONDS,
+    prompt: { id, text, hint },
     streak: computeStreak(dates, date),
-    submitted: !!score,
-    score: score ? { total: score.total, perRound: score.perRound, handle: score.handle } : null,
-    // Rounds already started can't be replayed; the client resumes from here.
-    rounds: session.rounds.map((r) => ({ started: r.startedAt !== null, answers: r.answers })),
+    started: session.startedAt !== null,
+    elapsedMs: session.startedAt === null ? 0 : Date.now() - session.startedAt,
+    events: session.events,
+    result: score ? { total: score.total, survivedMs: score.survivedMs, standing: await standingFor(score) } : null,
   });
 }

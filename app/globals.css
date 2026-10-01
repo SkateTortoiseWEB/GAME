@@ -325,3 +325,10 @@ button {
   30%, 50%, 70% { transform: translateX(-6px); }
   40%, 60% { transform: translateX(6px); }
 }
+/* Placeholder scene for the run (magma / stack / runner). Replace with real art. */
+.arena { position: relative; height: 240px; margin-bottom: 20px; border-radius: var(--radius-md); background: var(--bg-color); border: 1px solid var(--border); overflow: hidden; }
+.arena-stack { position: absolute; bottom: 0; left: 50%; width: 64px; margin-left: -32px; background: repeating-linear-gradient(0deg, #4a3f36 0 14px, #3a322b 14px 16px); transition: height 0.25s ease-out; }
+.arena-runner { position: absolute; left: 50%; width: 18px; height: 28px; margin-left: -9px; border-radius: 9px 9px 3px 3px; background: var(--text-main); transition: bottom 0.25s ease-out; }
+.arena-magma { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, #7a1500, var(--accent) 70%, var(--warning)); box-shadow: 0 -6px 18px rgba(255, 90, 0, 0.6); transition: height 0.2s linear; }
+.arena-danger { border-color: var(--error); animation: pulse 0.6s infinite; }
+.standing { font-size: 1.15rem; margin-bottom: 4px; }
