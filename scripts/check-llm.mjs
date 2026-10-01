@@ -3,7 +3,7 @@
 const base = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
 const key = process.env.LLM_API_KEY;
 const model = process.env.LLM_MODEL || "gpt-5-nano";
-const timeout = Number(process.env.LLM_TIMEOUT_MS) || 15000;
+const timeout = Number(process.env.LLM_TIMEOUT_MS) || 6000;
 const effort = process.env.LLM_REASONING_EFFORT || (/^(gpt-5|o\d)/.test(model) ? "minimal" : "");
 
 if (!key) {

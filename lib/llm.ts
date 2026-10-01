@@ -9,7 +9,7 @@ export type LlmResult = { ok: true; verdict: LlmVerdict } | { ok: false; reason:
  * Asks any OpenAI-compatible chat endpoint whether `answer` belongs to `category`.
  * A failure is reported (and logged) instead of thrown, so callers never cache it.
  */
-export async function judgeWithLlm(category: string, answer: string): Promise<LlmResult> {
+async function attempt(category: string, answer: string): Promise<LlmResult & { retry?: boolean }> {
   const key = process.env.LLM_API_KEY;
   if (!key) return fail("LLM_API_KEY is not set (add it to .env.local and restart the server)");
   const base = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
@@ -20,7 +20,7 @@ export async function judgeWithLlm(category: string, answer: string): Promise<Ll
     const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(Number(process.env.LLM_TIMEOUT_MS) || 15000),
+      signal: AbortSignal.timeout(Number(process.env.LLM_TIMEOUT_MS) || 6000),
       body: JSON.stringify({
         model,
         response_format: { type: "json_object" },
@@ -40,7 +40,10 @@ export async function judgeWithLlm(category: string, answer: string): Promise<Ll
         ],
       }),
     });
-    if (!res.ok) return fail(`${base} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      const r = fail(`${base} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      return res.status >= 500 || res.status === 429 ? { ...r, retry: true } : r;
+    }
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content ?? "";
     const parsed = JSON.parse(content);
@@ -48,11 +51,21 @@ export async function judgeWithLlm(category: string, answer: string): Promise<Ll
     const canonical = typeof parsed.canonical === "string" ? parsed.canonical.slice(0, 80) : null;
     return { ok: true, verdict: { valid: parsed.valid, canonical: parsed.valid ? canonical : null } };
   } catch (e) {
-    return fail(e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    // Timeouts and dropped connections are usually transient, so worth one more try.
+    return { ...fail(e instanceof Error ? `${e.name}: ${e.message}` : String(e)), retry: true };
   }
 }
 
-function fail(reason: string): LlmResult {
+export async function judgeWithLlm(category: string, answer: string): Promise<LlmResult> {
+  const started = Date.now();
+  let r = await attempt(category, answer);
+  if (!r.ok && r.retry) r = await attempt(category, answer);
+  const ms = Date.now() - started;
+  if (ms > 3000) console.warn(`[llm] slow check: ${ms}ms (${r.ok ? "ok" : "failed"})`);
+  return r.ok ? { ok: true, verdict: r.verdict } : { ok: false, reason: r.reason };
+}
+
+function fail(reason: string): LlmResult & { ok: false } {
   console.error(`[llm] ${reason}`);
   return { ok: false, reason };
 }
