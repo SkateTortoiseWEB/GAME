@@ -8,11 +8,10 @@ import SoundToggle from "./audio/SoundToggle";
 import LavaCanvas from "./scene/LavaCanvas";
 import SkyCanvas from "./scene/SkyCanvas";
 import type { SceneState } from "./scene/types";
-import { DoneSheet, MenuSheet, ReadySheet } from "./Sheets";
+import { DoneSheet, MenuSheet, ReadySheet, WelcomeSheet } from "./Sheets";
 import type { Entry, HomeData, Phase, Result, Today } from "./types";
 
 /** Seconds of "get ready" before the run starts by itself. The server clock only starts after it. */
-const GET_READY_SECONDS = 3;
 /** Pixels per unit of height in the scene. */
 const UNIT = 38;
 /** While running, Cinder sits this far up the screen (share of the height, measured from the bottom). */
@@ -81,7 +80,7 @@ export default function App() {
   const [wrong, setWrong] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
-  const [readyIn, setReadyIn] = useState(GET_READY_SECONDS);
+  const [welcome, setWelcome] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [delta, setDelta] = useState<{ text: string; ok: boolean; key: number } | null>(null);
   const [board, setBoard] = useState<{ entries: Entry[]; you: Entry | null } | null>(null);
@@ -135,7 +134,6 @@ export default function App() {
       applyServerState(d.events, d.elapsedMs);
       setPhase("playing");
     } else {
-      setReadyIn(GET_READY_SECONDS);
       setPhase("ready");
     }
     return d;
@@ -151,13 +149,18 @@ export default function App() {
     finishing.current = false;
     setEvents([]); setT(0); tRef.current = 0; setResult(null); setBoard(null); setMsg(null); setError(null); setInput("");
     setWrong(false); setSuggestion(null); setSlowCheck(false); setReaction(null); setBursts([]); setDelta(null);
-    setMenu(false); setToday(null); setPhase("loading"); setReadyIn(GET_READY_SECONDS);
+    setMenu(false); setToday(null); setPhase("loading");
     void loadToday();
   }, [genre, loadToday]);
 
   useEffect(() => { loadHome(); }, [loadHome]);
   useEffect(() => { if (menu || phase === "done") loadHome(); }, [menu, phase, loadHome]);
-  useEffect(() => { try { setRulesSeen(localStorage.getItem("pw-rules") === "1"); } catch { setRulesSeen(false); } }, []);
+  useEffect(() => {
+    try {
+      setRulesSeen(localStorage.getItem("pw-rules") === "1");
+      setWelcome(localStorage.getItem("pw-welcome") !== "1");
+    } catch { setRulesSeen(false); setWelcome(true); }
+  }, []);
   useEffect(() => { for (const p of POSES) new Image().src = panda(p); }, []);
   useEffect(() => {
     if (!reaction) return;
@@ -272,20 +275,6 @@ export default function App() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [genre, applyServerState]);
 
-  // Countdown ticks and the "go" chime.
-  useEffect(() => {
-    if (phase !== "ready" || menu) return;
-    sfx.play(readyIn > 0 ? "tick" : "go");
-  }, [phase, readyIn, menu]);
-
-  // No start button: after a short countdown the run begins by itself, unless the player opens the menu.
-  useEffect(() => {
-    if (phase !== "ready" || menu) return;
-    if (readyIn <= 0) { void begin(); return; }
-    const timer = setTimeout(() => setReadyIn((n) => n - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [phase, readyIn, begin, menu]);
-
   // Out of a run: tick every second, and reload when tomorrow's questions unlock.
   useEffect(() => {
     if (phase === "playing") return;
@@ -298,8 +287,12 @@ export default function App() {
     return () => clearInterval(timer);
   }, [phase, today]);
 
-  const openMenu = useCallback(() => { setReadyIn(GET_READY_SECONDS); setMenu(true); }, []);
-  const closeMenu = useCallback(() => { setReadyIn(GET_READY_SECONDS); setMenu(false); }, []);
+  const dismissWelcome = useCallback(() => {
+    setWelcome(false);
+    try { localStorage.setItem("pw-welcome", "1"); } catch { /* shown again next visit in private mode */ }
+  }, []);
+  const openMenu = useCallback(() => setMenu(true), []);
+  const closeMenu = useCallback(() => setMenu(false), []);
 
   function send(e: React.FormEvent) {
     e.preventDefault();
@@ -456,7 +449,8 @@ export default function App() {
       )}
 
       {phase === "loading" && <section className="sheet"><div className="loader" /></section>}
-      {phase === "ready" && today && !menu && <ReadySheet today={today} readyIn={readyIn} rulesSeen={rulesSeen} error={error} onMenu={openMenu} />}
+      {phase === "ready" && welcome && <WelcomeSheet onContinue={dismissWelcome} />}
+      {phase === "ready" && today && !menu && !welcome && <ReadySheet today={today} rulesSeen={rulesSeen} error={error} onStart={() => void begin()} onMenu={openMenu} />}
       {menu && phase !== "playing" && <MenuSheet home={home} currentId={genre} onClose={closeMenu} />}
       {phase === "done" && today && result && !menu && (
         <DoneSheet today={today} result={result} proud={proud} now={now} home={home} answers={answers} scope={scope} onScope={setScope} board={board} />

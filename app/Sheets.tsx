@@ -41,9 +41,9 @@ function QuestionList({ home, currentId, onPick }: { home: HomeData | null; curr
 
 /** Shown before a run: the question, then a short countdown, then the run starts by itself. */
 export const ReadySheet = memo(function ReadySheet(props: {
-  today: Today; readyIn: number; rulesSeen: boolean | null; error: string | null; onMenu: () => void;
+  today: Today; rulesSeen: boolean | null; error: string | null; onStart: () => void; onMenu: () => void;
 }) {
-  const { today, readyIn, rulesSeen, error, onMenu } = props;
+  const { today, rulesSeen, error, onStart, onMenu } = props;
   return (
     <section className="sheet" aria-live="polite">
       <p className="sheet-kicker">{today.genre.main ? "Today's question" : `Extra: ${today.genre.name}`}</p>
@@ -56,13 +56,29 @@ export const ReadySheet = memo(function ReadySheet(props: {
         </p>
       )}
       {today.genre.main && today.streak.current > 0 && <p className="streak">{today.streak.current} day streak. Finish today to keep it going.</p>}
-      {error ? <p className="msg-bad">{error}</p> : (
-        <p className="sheet-count">Starting in <b key={readyIn}>{readyIn > 0 ? readyIn : "now"}</b></p>
-      )}
+      {error && <p className="msg-bad">{error}</p>}
+      <button className="btn-primary" onClick={() => { sfx.play("go"); onStart(); }}>Start</button>
       <div className="sheet-actions">
         <button className="btn-secondary" onClick={() => { sfx.play("tap"); onMenu(); }}>Other questions</button>
         <SoundToggle />
       </div>
+    </section>
+  );
+});
+
+/** First visit only: what the game is, before anything starts. */
+export const WelcomeSheet = memo(function WelcomeSheet({ onContinue }: { onContinue: () => void }) {
+  return (
+    <section className="sheet" aria-live="polite">
+      <h1 className="sheet-question">Welcome to Pawmpeii</h1>
+      <p className="rules-text">
+        Each day there is a new question. Name as many answers as you can while lava rises under Cinder the panda.
+        Every correct answer builds a block and buys you time. Wrong answers make the lava surge.
+      </p>
+      <p className="rules-text">
+        You get one try per question each day. Today's Question keeps your streak, and the other sections are optional extras.
+      </p>
+      <button className="btn-primary" onClick={() => { sfx.play("tap"); onContinue(); }}>Continue</button>
     </section>
   );
 });
