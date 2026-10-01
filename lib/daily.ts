@@ -1,6 +1,8 @@
-import { PROMPTS, type PromptDef } from "@/data/prompts";
+import { CATEGORIES, NICHE_PROMPTS, type PromptDef } from "@/data/prompts";
+import { eligibleLetters, letterPrompt } from "./prompts";
 
 export const PROMPTS_PER_DAY = 5;
+const LETTER_PROMPTS = 3; // the other two are hand-picked niche prompts
 export const ROUND_SECONDS = 30;
 export const GRACE_MS = 2500;
 
@@ -26,13 +28,22 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Same five prompts for everyone on a given UTC day. */
+function shuffle<T>(items: T[], rand: () => number): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Same five prompts for everyone on a given UTC day: 3 "X that start with Y" + 2 niche, in mixed order. */
 export function promptsForDate(date: string): PromptDef[] {
   const rand = mulberry32(hash(date));
-  const pool = [...PROMPTS];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, PROMPTS_PER_DAY);
+  const letterPicks = shuffle(CATEGORIES, rand).slice(0, LETTER_PROMPTS).map((cat) => {
+    const letters = eligibleLetters(cat);
+    return letterPrompt(cat, letters[Math.floor(rand() * letters.length)]);
+  });
+  const nichePicks = shuffle(NICHE_PROMPTS, rand).slice(0, PROMPTS_PER_DAY - LETTER_PROMPTS);
+  return shuffle([...letterPicks, ...nichePicks], rand);
 }

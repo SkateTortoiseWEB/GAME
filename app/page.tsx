@@ -4,7 +4,7 @@ export default function Page() {
   return (
     <main>
       <h1>Listicle</h1>
-      <p className="tag">Five categories a day. Name as many as you can.</p>
+      <p className="tag">Five niche categories a day. Name as many as you can.</p>
       <Game />
     </main>
   );

@@ -27,6 +27,7 @@ export default function Game() {
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
   const [wrong, setWrong] = useState(false);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
   const [msLeft, setMsLeft] = useState(0);
   const [result, setResult] = useState<{ total: number; perRound: number[]; streak?: { current: number; best: number } } | null>(null);
@@ -95,6 +96,13 @@ export default function Game() {
     return () => clearInterval(t);
   }, [phase, index, answers, finishRound]);
 
+  // Between rounds: show the tally briefly, then roll straight into the next round.
+  useEffect(() => {
+    if (phase !== "between") return;
+    const t = setTimeout(() => startRound(index + 1), 1500);
+    return () => clearTimeout(t);
+  }, [phase, index, startRound]);
+
   function begin() {
     // Resume the last started round (its server clock keeps running); otherwise begin at round 1.
     const lastStarted = today ? today.rounds.map((r) => r.started).lastIndexOf(true) : -1;
@@ -103,7 +111,8 @@ export default function Game() {
 
   function send(e: React.FormEvent) {
     e.preventDefault();
-    const text = input.trim();
+    // A pending suggestion is submitted in place of what was typed.
+    const text = suggestion ?? input.trim();
     if (!text || phase !== "playing" || checking) return;
     setChecking(true);
     queue.current = queue.current.then(async () => {
@@ -113,7 +122,14 @@ export default function Game() {
         setMsg({ text: `+1  ${r.canonical}`, ok: true });
         setInput("");
         setWrong(false);
+        setSuggestion(null);
+      } else if (r.status === "suggest") {
+        // Typo fixed by the server: offer it, don't accept it.
+        setSuggestion(r.canonical);
+        setWrong(false);
+        setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept, or keep typing`, ok: false });
       } else {
+        setSuggestion(null);
         // Wrong answers stay in the box, turn red and shake so they can be edited.
         setMsg({
           text: r.status === "duplicate" ? `Already have ${r.canonical}`
@@ -145,12 +161,11 @@ export default function Game() {
   }
 
   if (phase === "between") {
-    const done = all.slice(0, index + 1).reduce((s, a) => s + (a?.length ?? 0), 0);
+    const done = all.slice(0, index + 1).reduce((t, a) => t + (a?.length ?? 0), 0);
     return (
       <section>
-        <h2>Round {index + 1} done: {all[index]?.length ?? 0}</h2>
-        <p>Running total: {done}</p>
-        <button onClick={() => startRound(index + 1)}>Next: round {index + 2} →</button>
+        <h2>Round {index + 1}: {all[index]?.length ?? 0} found</h2>
+        <p>Running total: {done}. Next category coming up…</p>
       </section>
     );
   }
@@ -164,12 +179,12 @@ export default function Game() {
         <h2>{prompt.text}</h2>
         {prompt.hint && <p className="hint">{prompt.hint}</p>}
         <form onSubmit={send}>
-          <input ref={inputRef} className={`text${wrong ? " wrong" : ""}${shaking ? " shake" : ""}`}
-            value={input} onChange={(e) => { setInput(e.target.value); setWrong(false); setMsg(null); }}
+          <input ref={inputRef} className={`text${wrong ? " wrong" : ""}${suggestion ? " suggest" : ""}${shaking ? " shake" : ""}`}
+            value={input} onChange={(e) => { setInput(e.target.value); setWrong(false); setSuggestion(null); setMsg(null); }}
             onAnimationEnd={() => setShaking(false)}
             autoComplete="off" autoCapitalize="off" placeholder="Type an answer, press Enter" />
         </form>
-        <p className={msg?.ok ? "ok" : "bad"} aria-live="polite">{msg?.text ?? " "}</p>
+        <p className={msg?.ok ? "ok" : suggestion ? "maybe" : "bad"} aria-live="polite">{msg?.text ?? " "}</p>
         <p><b>{answers.length}</b> so far</p>
         <ul className="chips">{[...answers].reverse().map((a) => <li key={a}>{a}</li>)}</ul>
       </section>

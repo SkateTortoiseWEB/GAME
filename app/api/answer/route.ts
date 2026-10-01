@@ -29,6 +29,9 @@ export async function POST(req: Request) {
 
   const prompt = promptsForDate(date)[index];
   const result = await judgeAnswer(prompt, answer);
+  if (result.status === "suggest") {
+    return NextResponse.json({ status: "suggest", canonical: result.canonical, count: round.answers.length });
+  }
   if (result.status !== "valid") return NextResponse.json({ status: result.status, count: round.answers.length });
 
   // Re-read in case a parallel request already added answers, then dedupe by normalized name.
