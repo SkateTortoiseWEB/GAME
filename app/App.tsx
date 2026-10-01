@@ -354,7 +354,7 @@ export default function App() {
         setShaking(true);
       } else if (r.status === "error") {
         setSuggestion(null);
-        setMsg({ text: r.detail ? `Checker problem: ${r.detail}` : "Couldn't check that one, try again.", ok: false });
+        setMsg({ text: r.detail ? (r.limited || /busy/.test(r.detail) ? r.detail : `Checker problem: ${r.detail}`) : "Couldn't check that one, try again.", ok: false });
         setWrong(true);
         setShaking(true);
       } else {

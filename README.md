@@ -90,4 +90,13 @@ Without Supabase env vars it uses an in-memory store (resets on restart). With t
 `supabase/migrations/001_init.sql` first. Without `LLM_API_KEY`, answers off the list are reported as unverifiable.
 
 ## Not done yet
-Real accounts (identity is a server-issued cookie, so clearing cookies or private windows resets play and streak), rate limiting (a script with a big word list could currently post a huge score), real graphics (the scene is a placeholder), more prompts, tuning with playtesters, forgiving LLM outages (a checker error costs nothing but time still passes).
+Still open: real accounts (identity is a server-issued cookie, so clearing cookies or private windows resets play and streak), real graphics tuning, more prompts, and tuning with playtesters.
+
+## Going live (free players)
+
+1. **Supabase**: create a project, open the SQL editor and run `supabase/migrations/001_init.sql` then `002_counters.sql`. Copy the project URL and the `service_role` key (server only; never put it in client code or commit it).
+2. **AI key**: use a paid-tier key for the AI provider, not a free-tier one. Free tiers have low request caps and may use prompts for training. Flash-Lite class models cost a fraction of a cent per check, and only brand-new answers reach the AI.
+3. **Vercel**: import the GitHub repo, then set these environment variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `NEXT_PUBLIC_SITE_URL`, and optionally `AI_DEVICE_DAILY_CAP` / `AI_GLOBAL_DAILY_CAP`. Deploy the branch you want live.
+4. **Check**: open the live URL, play one question, and confirm a row appears in `scores` and the leaderboard shows it. Run `npm run check-llm` locally against the same key first.
+
+Built-in protection: answers are capped at 60 characters, a device may post 90 answers a minute and an IP 600 (best-effort per server instance, `lib/ratelimit.ts`), and the AI is asked at most `AI_DEVICE_DAILY_CAP` times per player per day (default 250) and `AI_GLOBAL_DAILY_CAP` times site-wide (default 20000) (`lib/budget.ts`, counted in the `counters` table). When a cap is hit the checker says it is busy and the player loses nothing. A static privacy page lives at `/privacy.html`.

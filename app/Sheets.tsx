@@ -79,6 +79,7 @@ export const WelcomeSheet = memo(function WelcomeSheet({ onContinue }: { onConti
         You get one try per question each day. Today's Question keeps your streak, and the other sections are optional extras.
       </p>
       <button className="btn-primary" onClick={() => { sfx.play("tap"); onContinue(); }}>Continue</button>
+      <p className="hint"><a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a></p>
     </section>
   );
 });

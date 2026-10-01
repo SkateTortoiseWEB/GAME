@@ -16,6 +16,8 @@ export type JudgeResult =
 
 /** Called around the one slow step, the AI check, so the caller can stop the clock while it runs. */
 export interface AiHooks {
+  /** Return false to refuse the AI call (daily budget spent); the answer then reports a checker error. */
+  allowAi?: () => Promise<boolean>;
   beforeAi?: () => Promise<void>;
   afterAi?: () => Promise<void>;
 }
@@ -46,6 +48,7 @@ export async function judgeAnswer(basePrompt: PromptDef, raw: string, hooks?: Ai
   const cached = await store.getVerdict(prompt.id, norm);
   if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, cached.rarity ?? 0, "cache");
 
+  if (hooks?.allowAi && !(await hooks.allowAi())) return { status: "error", reason: "busy" };
   await hooks?.beforeAi?.();
   let res;
   try {

@@ -69,6 +69,8 @@ export interface Store {
   /** 1-based rank for a device's score in a genre on a date (total desc, then survived time desc). */
   rankOf(date: string, genre: string, deviceId: string): Promise<number | null>;
   leaderboard(scope: "daily" | "all", date: string, genre: string, limit: number): Promise<BoardEntry[]>;
+  /** Adds one to a named counter and returns the new value (used for the daily AI budget). */
+  bumpCounter(key: string): Promise<number>;
 }
 
 /**
@@ -114,6 +116,12 @@ class MemoryStore implements Store {
   async setVerdict(p: string, n: string, v: Verdict) {
     this.verdicts.set(`${p}:${n}`, v);
     this.save();
+  }
+  counters = new Map<string, number>();
+  async bumpCounter(key: string) {
+    const n = (this.counters.get(key) ?? 0) + 1;
+    this.counters.set(key, n);
+    return n;
   }
   async getList(promptId: string) { return this.lists.get(promptId) ?? null; }
   async setList(promptId: string, entries: ListEntry[]) {
@@ -182,6 +190,11 @@ class SupabaseStore implements Store {
   }
   async setVerdict(promptId: string, norm: string, v: Verdict) {
     await this.db.from("verdicts").upsert({ prompt_id: promptId, norm, valid: v.valid, canonical: v.canonical, rarity: v.rarity ?? 0 });
+  }
+  async bumpCounter(key: string) {
+    const { data, error } = await this.db.rpc("bump_counter", { k: key });
+    if (error) throw error;
+    return Number(data);
   }
   async getList(promptId: string) {
     const { data } = await this.db.from("prompt_lists").select("answers").eq("prompt_id", promptId).maybeSingle();
