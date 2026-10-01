@@ -3,7 +3,13 @@ import { eligibleLetters, letterPrompt } from "./prompts";
 
 export const PROMPTS_PER_DAY = 5;
 const LETTER_PROMPTS = 3; // the other two are hand-picked niche prompts
-export const ROUND_SECONDS = 30;
+export const START_SECONDS = 25;
+export const BONUS_SECONDS = 7;
+
+/** A round starts with 25s and every accepted answer adds 7s. */
+export function roundDeadline(startedAt: number, correct: number): number {
+  return startedAt + (START_SECONDS + BONUS_SECONDS * correct) * 1000;
+}
 export const GRACE_MS = 2500;
 
 export function todayKey(now = new Date()): string {

@@ -1,11 +1,10 @@
 import { CATEGORIES, NICHE_PROMPTS, type Category, type PromptDef } from "@/data/prompts";
 import { normalize } from "./normalize";
 
-/** A letter needs at least this many curated answers to be offered. */
-export const MIN_LETTER_ANSWERS = 4;
-
+/** A title counts for letter X whether or not its leading article is ignored ("The Matrix" -> M or T). */
 export function startsWithLetter(form: string, letter: string): boolean {
-  return normalize(form).startsWith(letter);
+  const raw = form.trim().replace(/^[^a-z0-9]+/i, "").toLowerCase();
+  return normalize(form).startsWith(letter) || raw.startsWith(letter);
 }
 
 /** Entries keep their canonical name but only the forms (name/aliases) that start with the letter. */
@@ -19,17 +18,8 @@ export function formsStartingWith(category: Category, letter: string): string[] 
   return out;
 }
 
-const eligible = new Map<string, string[]>();
-
 export function eligibleLetters(category: Category): string[] {
-  let letters = eligible.get(category.id);
-  if (!letters) {
-    letters = "abcdefghijklmnopqrstuvwxyz".split("").filter(
-      (l) => formsStartingWith(category, l).length >= MIN_LETTER_ANSWERS
-    );
-    eligible.set(category.id, letters);
-  }
-  return letters;
+  return category.letters.split("");
 }
 
 const built = new Map<string, PromptDef>();

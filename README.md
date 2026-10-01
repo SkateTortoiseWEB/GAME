@@ -1,10 +1,11 @@
 # Listicle
 
-Daily list-naming game: 5 categories a day, 30 seconds each, name as many valid members as you can.
-One point per unique valid answer. Global daily and all-time rankings.
+Daily list-naming game: 5 broad categories a day (3 "X that start with Y" + 2 niche). Each round starts at 25s and
+every accepted answer adds 7s. Every category has hundreds of valid answers. One point per unique valid answer. Global daily and all-time rankings.
 
 ## How answers are checked (hybrid)
-1. **Curated list** (`data/prompts.ts`) with aliases and typo-tolerant matching (`lib/match.ts`).
+1. **Seed list** (`data/prompts.ts`): common answers with aliases, typo suggestions, and no LLM cost. It is only a fast path;
+   most valid answers are expected to come from the LLM, so **`LLM_API_KEY` is required for the game to be playable**.
 2. **Verdict cache** (`verdicts` table): an answer judged before is never judged again.
 3. **LLM judge** (`lib/llm.ts`) for the rest, via any OpenAI-compatible endpoint.
 

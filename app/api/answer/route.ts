@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { promptsForDate, GRACE_MS, PROMPTS_PER_DAY, ROUND_SECONDS, todayKey } from "@/lib/daily";
+import { promptsForDate, GRACE_MS, PROMPTS_PER_DAY, roundDeadline, todayKey } from "@/lib/daily";
 import { judgeAnswer } from "@/lib/judge";
 import { normalize } from "@/lib/normalize";
 import { getDeviceId } from "@/lib/identity";
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const session = await loadSession(date, deviceId);
   const round = session.rounds[index];
   if (round.startedAt === null) return NextResponse.json({ error: "round not started" }, { status: 409 });
-  if (Date.now() > round.startedAt + ROUND_SECONDS * 1000 + GRACE_MS) {
+  if (Date.now() > roundDeadline(round.startedAt, round.answers.length) + GRACE_MS) {
     return NextResponse.json({ status: "late", count: round.answers.length });
   }
 

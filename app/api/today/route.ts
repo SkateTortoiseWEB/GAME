@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { promptsForDate, ROUND_SECONDS, todayKey } from "@/lib/daily";
+import { BONUS_SECONDS, promptsForDate, START_SECONDS, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
 import { loadSession } from "@/lib/session";
 import { computeStreak } from "@/lib/streak";
@@ -21,7 +21,8 @@ export async function GET() {
   return NextResponse.json({
     date,
     prompts,
-    roundSeconds: ROUND_SECONDS,
+    startSeconds: START_SECONDS,
+    bonusSeconds: BONUS_SECONDS,
     streak: computeStreak(dates, date),
     submitted: !!score,
     score: score ? { total: score.total, perRound: score.perRound, handle: score.handle } : null,

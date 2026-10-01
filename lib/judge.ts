@@ -2,6 +2,7 @@ import type { PromptDef } from "@/data/prompts";
 import { judgeWithLlm } from "./llm";
 import { matchList } from "./match";
 import { normalize } from "./normalize";
+import { startsWithLetter } from "./prompts";
 import { getStore } from "./store";
 
 export type JudgeResult =
@@ -12,7 +13,7 @@ export type JudgeResult =
   | { status: "invalid" }
   | { status: "error" };
 
-const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || normalize(text).startsWith(prompt.letter);
+const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || startsWithLetter(text, prompt.letter);
 
 /**
  * Hybrid check: curated list -> verdict cache -> LLM (cached, so each answer is judged once).

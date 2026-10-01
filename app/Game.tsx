@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface Today {
   date: string;
   prompts: { id: string; text: string; hint?: string }[];
-  roundSeconds: number;
+  startSeconds: number;
+  bonusSeconds: number;
   submitted: boolean;
   streak: { current: number; best: number };
   score: { total: number; perRound: number[]; handle: string } | null;
@@ -119,6 +120,7 @@ export default function Game() {
       const r = await post("/api/answer", { index, answer: text });
       if (r.status === "valid") {
         setAnswers((a) => [...a, r.canonical]);
+        endAt.current += today!.bonusSeconds * 1000; // mirrors the server clock
         setMsg({ text: `+1  ${r.canonical}`, ok: true });
         setInput("");
         setWrong(false);
@@ -153,7 +155,7 @@ export default function Game() {
     return (
       <section>
         {today.streak.current > 0 && <p className="streak">🔥 {today.streak.current}-day streak. Play today to keep it going.</p>}
-        <p>{today.prompts.length} categories · {today.roundSeconds}s each · 1 point per valid answer · one attempt a day.</p>
+        <p>{today.prompts.length} categories · {today.startSeconds}s to start, +{today.bonusSeconds}s for every correct answer · 1 point each · one attempt a day.</p>
         <button onClick={begin}>Start today&apos;s round</button>
         {msg && <p className="bad">{msg.text}</p>}
       </section>
@@ -175,7 +177,7 @@ export default function Game() {
     return (
       <section>
         <div className="top"><span>Round {index + 1}/{today.prompts.length}</span><span className={secs <= 10 ? "bad" : ""}>{secs}s</span></div>
-        <div className="bar"><div style={{ width: `${(msLeft / (today.roundSeconds * 1000)) * 100}%` }} /></div>
+        <div className="bar"><div style={{ width: `${Math.min(100, (msLeft / (today.startSeconds * 1000)) * 100)}%` }} /></div>
         <h2>{prompt.text}</h2>
         {prompt.hint && <p className="hint">{prompt.hint}</p>}
         <form onSubmit={send}>

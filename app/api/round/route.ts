@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GRACE_MS, PROMPTS_PER_DAY, ROUND_SECONDS, todayKey } from "@/lib/daily";
+import { GRACE_MS, PROMPTS_PER_DAY, roundDeadline, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
 import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
@@ -25,6 +25,6 @@ export async function POST(req: Request) {
     round.startedAt = Date.now();
     await store.saveSession(session);
   }
-  const remainingMs = Math.max(0, round.startedAt + ROUND_SECONDS * 1000 - Date.now());
+  const remainingMs = Math.max(0, roundDeadline(round.startedAt, round.answers.length) - Date.now());
   return NextResponse.json({ remainingMs, graceMs: GRACE_MS, answers: round.answers });
 }
