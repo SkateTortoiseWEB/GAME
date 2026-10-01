@@ -14,17 +14,18 @@ export async function judgeWithLlm(category: string, answer: string): Promise<Ll
   if (!key) return fail("LLM_API_KEY is not set (add it to .env.local and restart the server)");
   const base = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   const model = process.env.LLM_MODEL || "gpt-5-nano";
+  const effort = process.env.LLM_REASONING_EFFORT || (/^(gpt-5|o\d)/.test(model) ? "minimal" : "");
 
   try {
     const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(Number(process.env.LLM_TIMEOUT_MS) || 15000),
       body: JSON.stringify({
         model,
         response_format: { type: "json_object" },
-        // GPT-5 / o-series are reasoning models: skip the thinking so a verdict takes ~1s, not ~10s.
-        ...(/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: "minimal" } : {}),
+        // Reasoning models think for seconds unless told not to. Override with LLM_REASONING_EFFORT.
+        ...(effort ? { reasoning_effort: effort } : {}),
         messages: [
           {
             role: "system",
