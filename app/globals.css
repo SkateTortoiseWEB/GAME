@@ -327,12 +327,11 @@ button {
 }
 /* The run: a full-screen scene. The magma fills the screen from the bottom, the player stands on a tower of word boxes. */
 .scene { position: fixed; inset: 0; overflow: hidden; background: #0d0a09; }
-.scene-cave { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, #2a1a12 0%, #120d0b 60%, #0a0706 100%); }
 
 /* Everything in the world is positioned from the bottom of the screen and moves with the camera as one. */
 .world { position: absolute; left: 0; right: 0; bottom: 0; height: 0; will-change: transform; }
 .tower, .box { position: absolute; left: 50%; width: min(240px, 70vw); margin-left: calc(min(240px, 70vw) / -2); }
-.tower { background: repeating-linear-gradient(0deg, #3a322b 0 36px, #2e2823 36px 38px); border: 1px solid #4a3f36; border-bottom: none; }
+.tower { bottom: 0; background: repeating-linear-gradient(0deg, #3a322b 0 36px, #2e2823 36px 38px); border: 1px solid #4a3f36; border-bottom: none; }
 .box {
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(180deg, #6b5a4a, #54463a);
@@ -346,13 +345,6 @@ button {
 
 .runner { position: absolute; left: 50%; width: 20px; height: 32px; margin-left: -10px; border-radius: 10px 10px 4px 4px; background: var(--text-main); box-shadow: 0 0 12px rgba(255, 240, 220, 0.5); }
 
-.scene-magma {
-  position: absolute; left: 0; right: 0; bottom: -3000px;
-  /* Colours are measured down from the surface in pixels, because this element is thousands of pixels tall. */
-  background: linear-gradient(180deg, #ffb347 0, var(--accent) 90px, #b52a00 320px, #4d0c00 700px, #3a0900 100%);
-  border-top: 4px solid #ffd27a;
-  box-shadow: 0 -10px 40px rgba(255, 90, 0, 0.7), 0 -2px 90px rgba(255, 60, 0, 0.45);
-}
 .scene-vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 calc(40px + var(--dread, 0) * 160px) rgba(255, 30, 30, calc(var(--dread, 0) * 0.6)); }
 
 /* Everything the player reads and types sits on top of the scene. */
@@ -378,15 +370,6 @@ button {
 
 /* Game over: the magma has risen over the whole screen; the results sit on top of it. */
 .over { position: relative; min-height: 100dvh; }
-.over-bg { position: fixed; inset: 0; z-index: -2; background: radial-gradient(ellipse at 50% 0%, #2a1a12 0%, #120d0b 55%, #0a0706 100%); }
-.over-magma {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 42vh; z-index: -1;
-  background: linear-gradient(0deg, #4d0c00 0%, #b52a00 40%, var(--accent) 85%, #ffb347 100%);
-  border-top: 4px solid #ffd27a;
-  box-shadow: 0 -10px 50px rgba(255, 90, 0, 0.6), 0 -2px 100px rgba(255, 60, 0, 0.4);
-  animation: magmaBreath 4s ease-in-out infinite;
-}
-@keyframes magmaBreath { 0%, 100% { height: 40vh; } 50% { height: 44vh; } }
 .over-content { max-width: 520px; margin: 0 auto; padding: 40px 16px 56vh; display: flex; flex-direction: column; align-items: center; text-align: center; }
 .over-kicker { color: var(--error); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 800; font-size: 0.9rem; }
 .over-score { font-size: 7rem; font-weight: 800; line-height: 1; color: var(--text-main); margin: 6px 0 2px; text-shadow: 0 0 40px rgba(255, 90, 0, 0.55); }
@@ -457,3 +440,13 @@ button {
 .over-panda { width: 190px; height: auto; margin-bottom: -6px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); }
 .sleep-panda { width: 96px; height: auto; margin: -6px auto 2px; display: block; }
 @media (prefers-reduced-motion: reduce) { .panda, .ready-panda { animation: none !important; } }
+
+/* ---- Night sky + lava canvases ---- */
+.sky-canvas, .lava-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.sky-fixed { position: fixed; inset: 0; z-index: -2; }
+.sky-fixed .sky-canvas { position: absolute; }
+.lava-fixed { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+/* Blocks under the lava: dimmer and redder, gently swaying as if seen through the heat. */
+.box.sub { filter: brightness(0.8) saturate(1.2) sepia(0.3) hue-rotate(-14deg); animation: subSway 2.6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -0.35s); }
+@keyframes subSway { 0%, 100% { translate: -1.5px 0; } 50% { translate: 1.5px 0.6px; } }
+@media (prefers-reduced-motion: reduce) { .box.sub { animation: none; } }

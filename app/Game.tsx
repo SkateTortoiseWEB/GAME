@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deathTime, MAGMA, stateAt, type RunEvent } from "@/lib/magma";
+import LavaCanvas from "./scene/LavaCanvas";
+import SkyCanvas from "./scene/SkyCanvas";
+import type { SceneState } from "./scene/types";
 
 interface Standing { rank: number | null; players: number; percentile: number | null }
 interface Result { total: number; survivedMs: number; standing: Standing }
@@ -42,9 +45,6 @@ const hms = (ms: number) => {
 };
 
 /** Cinder the panda. One image per pose in public/panda (made by scripts/slice-panda.py). */
-/** The magma element extends this far below the screen so it always fills the bottom, however the camera moves. */
-const MAGMA_DEPTH = 3000;
-
 const POSES = ["idle", "happy", "celebrate", "think", "sad", "scared", "tumble", "ponder", "sulk", "nervous", "scorched", "sleep"] as const;
 type Pose = (typeof POSES)[number];
 const panda = (pose: Pose) => `/panda/${pose}.png`;
@@ -79,6 +79,9 @@ export default function Game() {
   // Set while an answer is out for checking. The clock is held still, mirroring the server, which stops it for AI checks.
   const frozenAt = useRef<number | null>(null);
   const tRef = useRef(0); // latest run time, held while frozen
+  // Read every frame by the sky and lava canvases (kept in a ref so they never cause React re-renders).
+  const sceneState = useRef<SceneState>({ level: FLOOR, cam: 0, dread: 0, surge: 0 });
+  const idleScene = useRef<SceneState>({ level: 0, cam: 0, dread: 0.3, surge: 0 }); // for screens where nothing is climbing
   const sceneHRef = useRef(700);
   // What is drawn lags the true value slightly (easing), so jumps, such as a new block or a surge, glide instead of snapping.
   const shown = useRef<{ level: number; stack: number; cam: number } | null>(null);
@@ -164,6 +167,8 @@ export default function Game() {
       d.cam += (cam - d.cam) * (1 - Math.exp(-dt / 0.3)); // the camera follows more lazily
       setT(now);
       setView({ ...d });
+      const left = (deathTime(eventsRef.current) - now) / 1000;
+      sceneState.current = { level: d.level, cam: d.cam, dread: Math.min(1, Math.max(0, 1 - left / 20)), surge: sceneState.current.surge };
 
       if (frozenAt.current === null && deathTime(eventsRef.current) <= now) finish();
       raf = requestAnimationFrame(frame);
@@ -268,6 +273,7 @@ export default function Game() {
         setSuggestion(null);
         setMsg({ text: "Not on the list. The magma surges!", ok: false });
         setReaction({ pose: "sad", ms: 1200, key: Date.now() });
+        sceneState.current.surge++; // the lava heaves
         setWrong(true);
         setShaking(true);
       }
@@ -299,15 +305,16 @@ export default function Game() {
   if (phase === "playing") {
     return (
       <div className="scene" ref={sceneRef} style={{ "--dread": dread } as React.CSSProperties}>
-        <div className="scene-cave" />
+        <SkyCanvas stateRef={sceneState} />
 
         <div className="world" style={{ transform: `translate3d(0, ${cam}px, 0)` }}>
           <div className="tower" style={{ height: FLOOR + MAGMA.base * UNIT }} />
           {words.map((w, i) => {
             const bottom = FLOOR + (MAGMA.base + i * MAGMA.stone) * UNIT;
             if (belowScreen(bottom)) return null;
+            const submerged = bottom + UNIT <= view.level; // fully under the lava
             return (
-              <div key={`${i}-${w.name}`} className={`box drop-in r${w.rarity}`} style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
+              <div key={`${i}-${w.name}`} className={`box drop-in r${w.rarity}${submerged ? " sub" : ""}`} style={{ bottom, height: UNIT, "--i": i, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` } as React.CSSProperties}>
                 <span>{w.name}</span>
               </div>
             );
@@ -315,8 +322,8 @@ export default function Game() {
           <div className="panda-wrap" style={{ bottom: view.stack }}>
             <img key={pose} className={`panda panda-${pose}`} src={panda(pose)} alt="Cinder the panda" draggable={false} />
           </div>
-          <div className="scene-magma" style={{ height: view.level + MAGMA_DEPTH }} />
         </div>
+        <LavaCanvas stateRef={sceneState} />
         <div className="scene-vignette" />
 
         <div className="hud">
@@ -353,7 +360,7 @@ export default function Game() {
   if (phase === "ready") {
     return (
       <main className="layout-centered">
-        <div className="ambient-background" />
+        <div className="sky-fixed"><SkyCanvas /></div>
         <section className="card card-intro">
           <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
           <h1 className="title-main">Listicle</h1>
@@ -384,8 +391,8 @@ export default function Game() {
 
   return (
     <div className="over">
-      <div className="over-bg" />
-      <div className="over-magma" />
+      <div className="sky-fixed"><SkyCanvas /></div>
+      <div className="lava-fixed"><LavaCanvas stateRef={idleScene} fixedSurface={0.64} /></div>
       {result && (
         <main className="over-content">
           <img className="over-panda" src={panda("scorched")} alt="Cinder, scorched" draggable={false} />
@@ -431,7 +438,7 @@ export default function Game() {
             </div>
             <ol className="board">
               {board?.entries.map((e) => (
-                <li key={e.rank} className={`board-row ${e.you ? "is-me" : ""}`}>
+                <li key={`${e.rank}-${e.handle}`} className={`board-row ${e.you ? "is-me" : ""}`}>
                   <span className="board-rank">{e.rank}</span>
                   <span className="board-handle">{e.handle} {e.you && "(You)"}</span>
                   <span className="board-score">{e.total}</span>

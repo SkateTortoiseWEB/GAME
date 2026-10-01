@@ -19,6 +19,13 @@ The rules live in `lib/magma.ts` (start height, stone height, rise speed, accele
 clean 21-answers-a-minute player lasts about 3 minutes. The server decides when you are caught from the recorded
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.
 
+## The scene
+`app/scene/` holds two canvases. `SkyCanvas` is the night sky: three depths of twinkling stars, constellations (one is a panda that only
+appears if you climb high), a crescent moon and the odd shooting star, drifting slowly as the camera climbs. `LavaCanvas` is the lava:
+a see-through body (blocks under the surface show through, dim and tinted), a wavy glowing surface, cooling plates with glowing cracks
+(`lavaTexture.ts`), bubbles, and embers that rise off the surface and light the air. Wrong answers make it heave and spit. Both read one
+shared `SceneState` ref every frame, so they never cause React re-renders, and both calm down under `prefers-reduced-motion`.
+
 ## Cinder the panda
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
 `public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then nervous and scared as the magma nears,
