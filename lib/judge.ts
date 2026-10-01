@@ -22,7 +22,6 @@ const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || start
  */
 export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<JudgeResult> {
   const prompt = await withLearnedAnswers(basePrompt);
-  const hasList = prompt !== basePrompt; // a pre-generated list exists, so off-list answers lean rare
   const answer = raw.trim().slice(0, 60);
   const norm = normalize(answer);
   if (!norm || norm === normalize(prompt.text)) return { status: "invalid" };
@@ -41,7 +40,7 @@ export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<J
   const cached = await store.getVerdict(prompt.id, norm);
   if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, cached.rarity ?? 0, "cache");
 
-  const res = await judgeWithLlm(prompt.text, answer, hasList);
+  const res = await judgeWithLlm(prompt.text, answer);
   if (!res.ok) return { status: "error", reason: res.reason };
   const verdict = res.verdict;
   const ok = verdict.valid && !!verdict.canonical && startsRight(prompt, verdict.canonical);

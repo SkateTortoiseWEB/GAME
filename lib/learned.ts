@@ -36,6 +36,22 @@ export function sanitizeList(prompt: PromptDef, raw: (ListEntry | string)[]): Li
   return out;
 }
 
+/**
+ * Safety net on top of the AI's grading: however generous it was, at most ~10% of a list can be rare or better,
+ * ~3% ultra or better, ~1% insane. Entries over the limit drop to the tier below, so most blocks stay plain.
+ */
+export function capTiers(entries: ListEntry[]): ListEntry[] {
+  const total = entries.length;
+  const limit = [Infinity, Math.max(3, Math.round(total * 0.1)), Math.max(2, Math.round(total * 0.03)), Math.max(1, Math.round(total * 0.01))];
+  const used = [0, 0, 0, 0];
+  return entries.map((e) => {
+    let r = e.rarity;
+    while (r > 0 && used[r] >= limit[r]) r--;
+    for (let t = 1; t <= r; t++) used[t]++;
+    return r === e.rarity ? e : { ...e, rarity: r };
+  });
+}
+
 function remember(promptId: string, entries: ListEntry[]): Learned {
   const learned: Learned = {
     entries,
@@ -50,7 +66,8 @@ async function learnedFor(prompt: PromptDef): Promise<Learned> {
   const hit = cache.get(prompt.id);
   if (hit && (hit.entries.length > 0 || Date.now() - hit.at < RECHECK_MS)) return hit;
   const stored = await getStore().getList(prompt.id);
-  return remember(prompt.id, stored ? sanitizeList(prompt, stored) : []);
+  // Capping on load too, so lists saved before the cap existed are corrected without regenerating.
+  return remember(prompt.id, stored ? capTiers(sanitizeList(prompt, stored)) : []);
 }
 
 const merged = new Map<string, PromptDef>();
@@ -85,7 +102,7 @@ export function ensureAnswerList(prompt: PromptDef): Promise<void> {
       console.error(`[prewarm] ${prompt.id}: ${res.reason}`);
       return;
     }
-    const entries = sanitizeList(prompt, res.entries);
+    const entries = capTiers(sanitizeList(prompt, res.entries));
     if (entries.length === 0) return;
     await getStore().setList(prompt.id, entries);
     remember(prompt.id, entries);

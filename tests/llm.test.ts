@@ -54,13 +54,12 @@ describe("judgeWithLlm retries", () => {
     expect([await rarity("a"), await rarity("b"), await rarity("c"), await rarity("d"), await rarity("e")]).toEqual([2, 3, 0, 0, 0]);
   });
 
-  it("tells the model when the answer missed the pre-generated list", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(ok(true, "Bruges", 1));
+  it("asks for stingy grading: common is the default and uncertainty rounds down", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok(true, "Bruges", 0));
     vi.stubGlobal("fetch", fetchMock);
-    await judgeWithLlm("Cities", "bruges", true);
-    await judgeWithLlm("Cities", "bruges", false);
-    const sys = (i: number) => JSON.parse(fetchMock.mock.calls[i][1].body).messages[0].content as string;
-    expect(sys(0)).toContain("NOT among the 300 best-known");
-    expect(sys(1)).not.toContain("NOT among the 300 best-known");
+    await judgeWithLlm("Cities", "bruges");
+    const sys = JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content as string;
+    expect(sys).toContain("when unsure choose the LOWER grade");
+    expect(sys).not.toContain("rarely a 0");
   });
 });

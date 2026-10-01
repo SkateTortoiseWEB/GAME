@@ -20,7 +20,8 @@ Accepted answers are graded 0-3 for how niche they are, by the same LLM calls th
 the pre-generated list arrives sorted into common / rare / ultra / insane tiers, and a per-answer check returns a
 grade too. Common answers stay plain; rare blocks turn gold, ultra rare shiny purple, insanely rare rainbow. The grade is
 cosmetic: it does not change the score or the magma. The prompt that asks for grades (`RARITY_GUIDE` in `lib/llm.ts`) is
-deliberately stingy (about 70% common, 20% rare, 8% ultra, 2% insane) and is the knob to turn if too many or too few blocks light up.
+deliberately stingy (about 90% common, 7% rare, 2.5% ultra, 0.5% insane), and `capTiers` in `lib/learned.ts` enforces those limits on
+every answer list however generous the AI was. Those are the knobs to turn if too many or too few blocks light up.
 
 ## How answers are checked (hybrid)
 0. **Pre-generated list** (`lib/learned.ts`): the first visit of the day triggers one LLM call that builds a long list of valid

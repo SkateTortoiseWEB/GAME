@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ensureAnswerList, sanitizeList } from "@/lib/learned";
+import { capTiers, ensureAnswerList, sanitizeList } from "@/lib/learned";
 import { judgeAnswer } from "@/lib/judge";
 import { getPrompt } from "@/lib/prompts";
 import { NICHE_PROMPTS } from "@/data/prompts";
@@ -71,5 +71,31 @@ describe("pre-generated answer lists", () => {
     expect(await judgeAnswer(prompt, "wolverhampton")).toMatchObject({ status: "valid", canonical: "Wolverhampton", rarity: 3, source: "llm" });
     expect(await judgeAnswer(prompt, "Wolverhampton")).toMatchObject({ status: "valid", rarity: 3, source: "cache" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("capTiers (safety net against generous grading)", () => {
+  const entries = (n: number, rarity: number) => Array.from({ length: n }, (_, i) => ({ name: `a${rarity}-${i}`, rarity }));
+
+  it("leaves a sensible list alone", () => {
+    const list = [...entries(90, 0), ...entries(7, 1), ...entries(2, 2), ...entries(1, 3)];
+    expect(capTiers(list)).toEqual(list);
+  });
+
+  it("demotes the excess when the AI marks far too much as rare", () => {
+    const list = [...entries(40, 0), ...entries(60, 1)]; // 60% rare
+    const counts = [0, 1, 2, 3].map((r) => capTiers(list).filter((e) => e.rarity === r).length);
+    expect(counts[1]).toBe(10); // capped at 10% of 100
+    expect(counts[0]).toBe(90);
+  });
+
+  it("cascades: surplus ultra and insane drop one tier at a time", () => {
+    const list = [...entries(50, 0), ...entries(50, 3)];
+    const out = capTiers(list);
+    const counts = [0, 1, 2, 3].map((r) => out.filter((e) => e.rarity === r).length);
+    expect(counts[3]).toBe(1); // 1% of 100
+    expect(counts[2]).toBe(2); // 3% of 100 is 3 total ultra-or-better, so 2 + the 1 insane
+    expect(counts[1]).toBe(7); // 10% of 100 is 10 total rare-or-better
+    expect(counts[0]).toBe(90);
   });
 });
