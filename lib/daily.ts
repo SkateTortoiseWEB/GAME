@@ -28,7 +28,7 @@ function pickFrom(date: string, genreId: string, categoryIds: string[], nicheIds
   const rand = mulberry32(hash(`${date}:${genreId}:${salt}`));
   const categories = CATEGORIES.filter((c) => categoryIds.includes(c.id));
   const niche = NICHE_PROMPTS.filter((p) => nicheIds.includes(p.id));
-  const useNiche = categories.length === 0 || (niche.length > 0 && rand() < 0.4);
+  const useNiche = categories.length === 0 || (niche.length > 0 && rand() < 0.7);
   if (useNiche) return niche[Math.floor(rand() * niche.length)];
   const cat = categories[Math.floor(rand() * categories.length)];
   const letters = eligibleLetters(cat);
@@ -36,8 +36,8 @@ function pickFrom(date: string, genreId: string, categoryIds: string[], nicheIds
 }
 
 /**
- * One prompt per genre per day, the same for everyone. Players spend minutes on it, so every candidate must have
- * hundreds of valid answers. In a genre with both kinds, about two days in three it is a "starts with" prompt.
+ * One prompt per genre per day, the same for everyone. Players spend minutes on it, so every candidate needs plenty of
+ * valid answers. In a genre with both kinds, about seven days in ten it is a quirky prompt.
  * The main question draws from every genre's pool, and never repeats an extra's prompt of the same day.
  */
 export function promptForDate(date: string, genreId: string): PromptDef {

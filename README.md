@@ -11,7 +11,7 @@ its own "you outlasted X% of players" (rank until 20 players have finished).
 
 Genres live in `lib/genres.ts`: the main question (`general`) has no pool of its own, it picks from all the extras' pools and never repeats an
 extra's prompt of the same day; each extra lists the categories (which spawn "X that start with Y" prompts) and niche prompts it draws from.
-`promptForDate(date, genre)` picks deterministically. Every prompt must have hundreds of valid answers.
+`promptForDate(date, genre)` picks deterministically. Categories have hundreds of valid answers; quirky prompts may have dozens, and the LLM judges each answer against the exact wording.
 
 **One world, panels on top.** `app/App.tsx` is mounted once in the root layout and never unmounts: the night sky, tower, Cinder and lava are always
 there. The menu, get-ready screen, run HUD and results (`app/Sheets.tsx`) are panels over that world, so moving between them never feels like
