@@ -329,6 +329,8 @@ button {
 .scene { position: fixed; inset: 0; overflow: hidden; background: #0d0a09; }
 .scene-cave { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, #2a1a12 0%, #120d0b 60%, #0a0706 100%); }
 
+/* Everything in the world is positioned from the bottom of the screen and moves with the camera as one. */
+.world { position: absolute; left: 0; right: 0; bottom: 0; height: 0; will-change: transform; }
 .tower, .box { position: absolute; left: 50%; width: min(240px, 70vw); margin-left: calc(min(240px, 70vw) / -2); }
 .tower { background: repeating-linear-gradient(0deg, #3a322b 0 36px, #2e2823 36px 38px); border: 1px solid #4a3f36; border-bottom: none; }
 .box {
@@ -345,11 +347,11 @@ button {
 .runner { position: absolute; left: 50%; width: 20px; height: 32px; margin-left: -10px; border-radius: 10px 10px 4px 4px; background: var(--text-main); box-shadow: 0 0 12px rgba(255, 240, 220, 0.5); }
 
 .scene-magma {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(0deg, #4d0c00 0%, #b52a00 35%, var(--accent) 80%, #ffb347 100%);
+  position: absolute; left: 0; right: 0; bottom: -3000px;
+  /* Colours are measured down from the surface in pixels, because this element is thousands of pixels tall. */
+  background: linear-gradient(180deg, #ffb347 0, var(--accent) 90px, #b52a00 320px, #4d0c00 700px, #3a0900 100%);
   border-top: 4px solid #ffd27a;
   box-shadow: 0 -10px 40px rgba(255, 90, 0, 0.7), 0 -2px 90px rgba(255, 60, 0, 0.45);
-  transition: height 0.12s linear;
 }
 .scene-vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 calc(40px + var(--dread, 0) * 160px) rgba(255, 30, 30, calc(var(--dread, 0) * 0.6)); }
 
@@ -440,7 +442,7 @@ button {
 @media (prefers-reduced-motion: reduce) { .r2::after, .r3, .input-box.is-checking { animation: none; } }
 
 /* ---- Cinder the panda ---- */
-.panda-wrap { position: absolute; left: 50%; width: 92px; margin-left: -46px; pointer-events: none; transition: bottom 0.25s ease-out; }
+.panda-wrap { position: absolute; left: 50%; width: 92px; margin-left: -46px; pointer-events: none; }
 .panda { display: block; width: 100%; height: auto; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55)); transform-origin: 50% 100%; user-select: none; }
 .panda-idle { animation: pandaBob 1.6s ease-in-out infinite; }
 .panda-nervous { animation: pandaBob 0.9s ease-in-out infinite; }

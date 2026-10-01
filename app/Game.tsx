@@ -42,6 +42,9 @@ const hms = (ms: number) => {
 };
 
 /** Cinder the panda. One image per pose in public/panda (made by scripts/slice-panda.py). */
+/** The magma element extends this far below the screen so it always fills the bottom, however the camera moves. */
+const MAGMA_DEPTH = 3000;
+
 const POSES = ["idle", "happy", "celebrate", "think", "sad", "scared", "tumble", "ponder", "sulk", "nervous", "scorched", "sleep"] as const;
 type Pose = (typeof POSES)[number];
 const panda = (pose: Pose) => `/panda/${pose}.png`;
@@ -75,6 +78,11 @@ export default function Game() {
   const anchor = useRef(0); // Date.now() minus elapsed run time
   // Set while an answer is out for checking. The clock is held still, mirroring the server, which stops it for AI checks.
   const frozenAt = useRef<number | null>(null);
+  const tRef = useRef(0); // latest run time, held while frozen
+  const sceneHRef = useRef(700);
+  // What is drawn lags the true value slightly (easing), so jumps, such as a new block or a surge, glide instead of snapping.
+  const shown = useRef<{ level: number; stack: number; cam: number } | null>(null);
+  const [view, setView] = useState({ level: FLOOR, stack: FLOOR + MAGMA.base * UNIT, cam: 0 });
   const eventsRef = useRef<RunEvent[]>([]);
   const finishing = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -132,20 +140,41 @@ export default function Game() {
     return d;
   }, [loadToday]);
 
+  // The game loop: one animation frame at a time. Everything on screen (magma, tower, camera, Cinder) is derived from one
+  // clock and eased by the same loop, so they always move together.
   useEffect(() => {
     if (phase !== "playing") return;
-    const timer = setInterval(() => {
-      if (frozenAt.current !== null) return; // a check is in flight: nothing moves
-      const now = Date.now() - anchor.current;
+    shown.current = null;
+    let last = performance.now();
+    let raf = 0;
+    const frame = (ts: number) => {
+      const dt = Math.min(0.1, (ts - last) / 1000);
+      last = ts;
+      let now: number;
+      if (frozenAt.current !== null) now = tRef.current; // a check is in flight: nothing moves
+      else { now = Date.now() - anchor.current; tRef.current = now; }
+
+      const st = stateAt(eventsRef.current, now);
+      const stack = FLOOR + st.stack * UNIT;
+      const level = FLOOR + st.level * UNIT;
+      const cam = Math.max(0, stack - sceneHRef.current * PLAYER_AT);
+      const d = shown.current ?? (shown.current = { level, stack, cam });
+      d.level += (level - d.level) * (1 - Math.exp(-dt / 0.08)); // a surge slides up quickly
+      d.stack += (stack - d.stack) * (1 - Math.exp(-dt / 0.14)); // Cinder climbs onto the new block
+      d.cam += (cam - d.cam) * (1 - Math.exp(-dt / 0.3)); // the camera follows more lazily
       setT(now);
-      if (deathTime(eventsRef.current) <= now) finish();
-    }, 50);
-    return () => clearInterval(timer);
+      setView({ ...d });
+
+      if (frozenAt.current === null && deathTime(eventsRef.current) <= now) finish();
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
   }, [phase, finish]);
 
   useEffect(() => {
     if (phase !== "playing") return;
-    const measure = () => setSceneH(sceneRef.current?.clientHeight ?? window.innerHeight);
+    const measure = () => { const h = sceneRef.current?.clientHeight ?? window.innerHeight; sceneHRef.current = h; setSceneH(h); };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
@@ -262,32 +291,32 @@ export default function Game() {
   const mood: Pose = secsToDeath <= 8 ? "scared" : secsToDeath <= 20 ? "nervous" : "idle";
   const pose: Pose = reaction?.pose ?? (slowCheck ? "think" : mood);
 
-  // Camera: follow the top of the stack so the player stays at a fixed spot on screen.
-  const stackPx = FLOOR + s.stack * UNIT;
-  const cam = Math.max(0, stackPx - sceneH * PLAYER_AT);
-  const magmaPx = Math.min(sceneH, Math.max(0, FLOOR + s.level * UNIT - cam));
-  const onScreen = (bottom: number) => bottom > -UNIT && bottom < sceneH;
+  // Camera: it follows the top of the stack so Cinder stays at a fixed spot on screen. The whole world moves with it,
+  // magma included, so adding a block never makes the lava appear to sink.
+  const cam = view.cam;
+  const belowScreen = (bottom: number) => bottom + UNIT - cam < 0;
 
   if (phase === "playing") {
     return (
       <div className="scene" ref={sceneRef} style={{ "--dread": dread } as React.CSSProperties}>
         <div className="scene-cave" />
 
-        <div className="tower" style={{ bottom: FLOOR - cam, height: MAGMA.base * UNIT }} />
-        {words.map((w, i) => {
-          const bottom = FLOOR + (MAGMA.base + i * MAGMA.stone) * UNIT - cam;
-          if (!onScreen(bottom)) return null;
-          return (
-            <div key={`${i}-${w.name}`} className={`box drop-in r${w.rarity}`} style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
-              <span>{w.name}</span>
-            </div>
-          );
-        })}
-        <div className="panda-wrap" style={{ bottom: stackPx - cam }}>
-          <img key={pose} className={`panda panda-${pose}`} src={panda(pose)} alt="Cinder the panda" draggable={false} />
+        <div className="world" style={{ transform: `translate3d(0, ${cam}px, 0)` }}>
+          <div className="tower" style={{ height: FLOOR + MAGMA.base * UNIT }} />
+          {words.map((w, i) => {
+            const bottom = FLOOR + (MAGMA.base + i * MAGMA.stone) * UNIT;
+            if (belowScreen(bottom)) return null;
+            return (
+              <div key={`${i}-${w.name}`} className={`box drop-in r${w.rarity}`} style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
+                <span>{w.name}</span>
+              </div>
+            );
+          })}
+          <div className="panda-wrap" style={{ bottom: view.stack }}>
+            <img key={pose} className={`panda panda-${pose}`} src={panda(pose)} alt="Cinder the panda" draggable={false} />
+          </div>
+          <div className="scene-magma" style={{ height: view.level + MAGMA_DEPTH }} />
         </div>
-
-        <div className="scene-magma" style={{ height: magmaPx }} />
         <div className="scene-vignette" />
 
         <div className="hud">
