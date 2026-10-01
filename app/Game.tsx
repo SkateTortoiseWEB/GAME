@@ -38,8 +38,10 @@ export default function Game() {
   const [all, setAll] = useState<string[][]>([]);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [input, setInput] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [wrong, setWrong] = useState(false);
+  const [shaking, setShaking] = useState(false);
   const [msLeft, setMsLeft] = useState(0);
-  const [handle, setHandle] = useState("");
   const [result, setResult] = useState<{ total: number; perRound: number[] } | null>(null);
   const [board, setBoard] = useState<{ scope: "daily" | "all"; entries: Entry[]; you: Entry | null } | null>(null);
   const [scope, setScope] = useState<"daily" | "all">("daily");
@@ -55,7 +57,6 @@ export default function Game() {
 
   useEffect(() => {
     if (!deviceId) return;
-    setHandle(localStorage.getItem("ld-handle") ?? "");
     fetch(`/api/today?deviceId=${deviceId}`).then((r) => r.json()).then((t: Today) => {
       setToday(t);
       if (t.submitted && t.score) {
@@ -71,8 +72,7 @@ export default function Game() {
   useEffect(() => { if (phase === "done") loadBoard(scope); }, [phase, scope, loadBoard]);
 
   const submit = useCallback(async (finalAll: string[][]) => {
-    const name = (localStorage.getItem("ld-handle") ?? "").trim();
-    const r = await post("/api/submit", { deviceId, handle: name });
+    const r = await post("/api/submit", { deviceId });
     setAll(finalAll);
     setResult(r);
     setPhase("done");
@@ -111,34 +111,38 @@ export default function Game() {
   }, [phase, index, answers, finishRound]);
 
   function begin() {
-    const name = handle.trim();
-    if (!/^[A-Za-z0-9 _-]{2,20}$/.test(name)) {
-      setMsg({ text: "Pick a name: 2–20 letters, numbers, spaces, _ or -", ok: false });
-      return;
-    }
-    localStorage.setItem("ld-handle", name);
     // Resume the last started round (its server clock keeps running); otherwise begin at round 1.
     const lastStarted = today ? today.rounds.map((r) => r.started).lastIndexOf(true) : -1;
-    const target = Math.max(0, lastStarted);
-    startRound(target);
+    startRound(Math.max(0, lastStarted));
   }
 
   function send(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || phase !== "playing") return;
-    setInput("");
+    if (!text || phase !== "playing" || checking) return;
+    setChecking(true);
     queue.current = queue.current.then(async () => {
       const r = await post("/api/answer", { deviceId, index, answer: text });
       if (r.status === "valid") {
         setAnswers((a) => [...a, r.canonical]);
         setMsg({ text: `+1  ${r.canonical}`, ok: true });
-      } else if (r.status === "duplicate") setMsg({ text: `Already have ${r.canonical}`, ok: false });
-      else if (r.status === "late") setMsg({ text: "Too late", ok: false });
-      else if (r.status === "error") setMsg({ text: "Couldn't check that one, try again", ok: false });
-      else setMsg({ text: `No: ${text}`, ok: false });
+        setInput("");
+        setWrong(false);
+      } else {
+        // Wrong answers stay in the box, turn red and shake so they can be edited.
+        setMsg({
+          text: r.status === "duplicate" ? `Already have ${r.canonical}`
+            : r.status === "late" ? "Too late"
+            : r.status === "error" ? "Couldn't check that one, try again"
+            : "Not on the list",
+          ok: false,
+        });
+        setWrong(true);
+        setShaking(true);
+      }
+      setChecking(false);
+      inputRef.current?.focus();
     });
-    inputRef.current?.focus();
   }
 
   if (phase === "loading" || !today) return <p>Loading…</p>;
@@ -148,9 +152,7 @@ export default function Game() {
     return (
       <section>
         <p>{today.prompts.length} categories · {today.roundSeconds}s each · 1 point per valid answer · one attempt a day.</p>
-        <input className="text" placeholder="Your name" value={handle} maxLength={20}
-          onChange={(e) => setHandle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && begin()} />
-        <button onClick={begin}>Start today&apos;s dive</button>
+        <button onClick={begin}>Start today&apos;s round</button>
         {msg && <p className="bad">{msg.text}</p>}
       </section>
     );
@@ -176,7 +178,9 @@ export default function Game() {
         <h2>{prompt.text}</h2>
         {prompt.hint && <p className="hint">{prompt.hint}</p>}
         <form onSubmit={send}>
-          <input ref={inputRef} className="text" value={input} onChange={(e) => setInput(e.target.value)}
+          <input ref={inputRef} className={`text${wrong ? " wrong" : ""}${shaking ? " shake" : ""}`}
+            value={input} onChange={(e) => { setInput(e.target.value); setWrong(false); setMsg(null); }}
+            onAnimationEnd={() => setShaking(false)}
             autoComplete="off" autoCapitalize="off" placeholder="Type an answer, press Enter" />
         </form>
         <p className={msg?.ok ? "ok" : "bad"} aria-live="polite">{msg?.text ?? " "}</p>
