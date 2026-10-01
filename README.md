@@ -30,6 +30,18 @@ a see-through body (blocks under the surface show through, dim and tinted), a wa
 (`lavaTexture.ts`), bubbles, and embers that rise off the surface and light the air. Wrong answers make it heave and spit. Both read one
 shared `SceneState` ref every frame, so they never cause React re-renders, and both calm down under `prefers-reduced-motion`.
 
+## Sound
+`app/audio/sfx.ts` synthesizes every sound in the browser with the Web Audio API, so there are no audio files. Accepted answers go "bloop" and
+climb a pentatonic scale as your combo grows, rare answers get bells (two for gold, an arpeggio for purple, a run up two octaves for rainbow),
+wrong answers are a soft wobbly boop with a lava gurgle, there is a countdown, a heartbeat when the lava is close, and a gentle game-over
+wah-wah and lullaby. Audio unlocks on the first tap or key press; the speaker button (bottom right) mutes and remembers the choice.
+
+## The look and flow
+Rounded fonts, squishy buttons, biscuit blocks with paw prints and sparkles floating up from Cinder on every accepted answer all live in the
+"Cute theme" block at the end of `app/globals.css`. The home screen shows each genre's question as a teaser, a big "Start here / Up next /
+Continue" banner, and a paw tracker for today. After a run, the game-over screen suggests the next unplayed genre. The first visit to a
+genre shows the full rules; later visits show a one-liner. Opening the home screen also builds all eight answer lists in the background.
+
 ## Cinder the panda
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
 `public/panda/` (needs `pip install pillow numpy scipy`). In the run Cinder reacts: idle, then nervous and scared as the magma nears,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deathTime, MAGMA, stateAt, type RunEvent } from "@/lib/magma";
 import Link from "next/link";
+import { sfx } from "./audio/sfx";
 import { hms, msUntilTomorrow } from "./time";
 import LavaCanvas from "./scene/LavaCanvas";
 import SkyCanvas from "./scene/SkyCanvas";
@@ -37,11 +38,29 @@ const PLAYER_AT = 0.5;
 const FLOOR = 72;
 
 /** Cinder the panda. One image per pose in public/panda (made by scripts/slice-panda.py). */
-const POSES = ["idle", "happy", "celebrate", "think", "sad", "scared", "tumble", "ponder", "sulk", "nervous", "scorched", "sleep"] as const;
+const POSES = ["idle", "cheer", "jump", "curious", "joy", "love", "relax", "shy", "tense", "worried", "tumble", "sleep"] as const;
 type Pose = (typeof POSES)[number];
 const panda = (pose: Pose) => `/panda/${pose}.png`;
 
 const RARITY_LABEL = ["", "RARE", "ULTRA RARE", "INSANELY RARE"];
+
+/** Sparkles that float up from Cinder when an answer is accepted: bigger and brighter for rarer answers. */
+interface Burst { id: number; y: number; items: { e: string; dx: number; delay: number; size: number }[] }
+const BURST_SETS = [["💖", "✨", "🐾"], ["⭐", "✨", "💛"], ["💜", "✨", "💫"], ["🌈", "⭐", "💖", "✨", "💜"]];
+const BURST_COUNT = [5, 7, 9, 13];
+let burstId = 0;
+const makeBurst = (tier: number, y: number): Burst => ({
+  id: ++burstId,
+  y,
+  items: Array.from({ length: BURST_COUNT[tier] }, (_, i) => ({
+    e: BURST_SETS[tier][i % BURST_SETS[tier].length],
+    dx: Math.round((Math.random() - 0.5) * (90 + tier * 40)),
+    delay: Math.round(Math.random() * 160),
+    size: 0.9 + Math.random() * 0.7 + tier * 0.15,
+  })),
+});
+
+interface NextGenre { id: string; name: string; emoji: string; prompt: string }
 /** Shorter than this and the answer was checked locally, so there is nothing to show. */
 const SLOW_CHECK_MS = 150;
 
@@ -55,6 +74,9 @@ export default function Game({ genre }: { genre: string }) {
   const [result, setResult] = useState<Result | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean; tier?: number; checking?: boolean } | null>(null);
   const [slowCheck, setSlowCheck] = useState(false);
+  const [bursts, setBursts] = useState<Burst[]>([]);
+  const [rulesSeen, setRulesSeen] = useState<boolean | null>(null);
+  const [next, setNext] = useState<NextGenre | "all" | null>(null);
   const [reaction, setReaction] = useState<{ pose: Pose; ms: number; key: number } | null>(null);
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
@@ -80,6 +102,8 @@ export default function Game({ genre }: { genre: string }) {
   const [view, setView] = useState({ level: FLOOR, stack: FLOOR + MAGMA.base * UNIT, cam: 0 });
   const eventsRef = useRef<RunEvent[]>([]);
   const finishing = useRef(false);
+  const combo = useRef(0); // accepted answers in a row; pitches the pop sound
+  const lastBeat = useRef(0);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const inputRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -110,6 +134,8 @@ export default function Game({ genre }: { genre: string }) {
 
   useEffect(() => { loadToday(); }, [loadToday]);
 
+  useEffect(() => { try { setRulesSeen(localStorage.getItem("pw-rules") === "1"); } catch { setRulesSeen(false); } }, []);
+
   // Load every pose up front so swapping poses never flickers.
   useEffect(() => { for (const p of POSES) new Image().src = panda(p); }, []);
 
@@ -124,6 +150,20 @@ export default function Game({ genre }: { genre: string }) {
     if (phase !== "done") return;
     fetch(`/api/leaderboard?genre=${genre}&scope=${scope}`).then((r) => r.json()).then(setBoard);
   }, [phase, scope, genre]);
+
+  // On the game-over screen: work out which genre to suggest next, and play the "caught" sounds.
+  useEffect(() => {
+    if (phase !== "done" || !result) return;
+    fetch("/api/home").then((r) => r.json()).then((h: { genres: { id: string; name: string; emoji: string; prompt: string; status: string }[] }) => {
+      const open = h.genres.filter((g) => g.id !== genre && g.status !== "done");
+      setNext(open.length ? open[0] : "all");
+    });
+    const proud = result.standing.percentile !== null ? result.standing.percentile >= 75 : result.standing.rank === 1;
+    sfx.play("gameover");
+    const t = setTimeout(() => sfx.play(proud ? "win" : "lullaby"), 1800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, result?.total]);
 
   // Ask the server to confirm the catch; if its clock disagrees, carry on from its state.
   const finish = useCallback(async () => {
@@ -162,6 +202,10 @@ export default function Game({ genre }: { genre: string }) {
       const left = (deathTime(eventsRef.current) - now) / 1000;
       sceneState.current = { level: d.level, cam: d.cam, dread: Math.min(1, Math.max(0, 1 - left / 20)), surge: sceneState.current.surge };
 
+      if (left > 0 && left <= 8 && frozenAt.current === null) { // a heartbeat each second while the lava is close
+        const sec = Math.ceil(left);
+        if (sec !== lastBeat.current) { lastBeat.current = sec; sfx.play("beat"); }
+      }
       if (frozenAt.current === null && deathTime(eventsRef.current) <= now) finish();
       raf = requestAnimationFrame(frame);
     };
@@ -181,9 +225,16 @@ export default function Game({ genre }: { genre: string }) {
     const r = await post("/api/run", { genre });
     if (r.error) { setMsg({ text: r.error, ok: false }); return; }
     applyServerState(r.events, r.elapsedMs);
+    try { localStorage.setItem("pw-rules", "1"); } catch { /* not remembered in private mode */ }
     setPhase("playing");
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [applyServerState]);
+
+  // Countdown ticks and the "go" chime.
+  useEffect(() => {
+    if (phase !== "ready") return;
+    sfx.play(readyIn > 0 ? "tick" : "go");
+  }, [phase, readyIn]);
 
   // No start button: after a short get-ready countdown the run begins by itself.
   useEffect(() => {
@@ -215,7 +266,7 @@ export default function Game({ genre }: { genre: string }) {
     // Only if the check takes a moment (i.e. it has gone to the AI) does the typed word change colour.
     const slowTimer = setTimeout(() => {
       setSlowCheck(true);
-      setMsg({ text: "Checking…", ok: false, checking: true });
+      setMsg({ text: "Thinking…", ok: false, checking: true });
     }, SLOW_CHECK_MS);
     queue.current = queue.current.then(async () => {
       const prevLeft = deathTime(eventsRef.current) - (Date.now() - anchor.current);
@@ -240,8 +291,15 @@ export default function Game({ genre }: { genre: string }) {
       if (r.dead || r.status === "dead") { setChecking(false); finish(); return; }
       if (r.status === "valid") {
         const tier: number = r.rarity ?? 0;
-        setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]} • ${r.canonical}` : `+1 • ${r.canonical}`, ok: true, tier });
-        setReaction(tier > 0 ? { pose: "celebrate", ms: 1600, key: Date.now() } : { pose: "happy", ms: 900, key: Date.now() });
+        setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]}! ${r.canonical}` : `Yay! ${r.canonical}`, ok: true, tier });
+        setReaction(tier > 0 ? { pose: "cheer", ms: 1600, key: Date.now() } : { pose: "jump", ms: 900, key: Date.now() });
+        combo.current += 1;
+        sfx.play(tier > 0 ? (`rare${tier}` as "rare1" | "rare2" | "rare3") : "pop", { combo: combo.current - 1 });
+        window.setTimeout(() => sfx.play("squeak"), 90);
+        const sh = shown.current;
+        const burst = makeBurst(tier, sh ? sceneHRef.current - (sh.stack + UNIT) + sh.cam - 56 : 220);
+        setBursts((b) => [...b.slice(-3), burst]);
+        window.setTimeout(() => setBursts((b) => b.filter((x) => x.id !== burst.id)), 1500);
         setInput("");
         setWrong(false);
         setSuggestion(null);
@@ -249,11 +307,13 @@ export default function Game({ genre }: { genre: string }) {
         // A fixed typo is only offered, never accepted, and costs nothing.
         setSuggestion(r.canonical);
         setWrong(false);
-        setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept, or keep typing.`, ok: false });
-        setReaction({ pose: "ponder", ms: 1200, key: Date.now() });
+        setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept 🐾`, ok: false });
+        setReaction({ pose: "shy", ms: 1200, key: Date.now() });
+        sfx.play("suggest");
       } else if (r.status === "duplicate") {
         setSuggestion(null);
-        setMsg({ text: `Already found ${r.canonical}`, ok: false });
+        setMsg({ text: `Already got ${r.canonical}!`, ok: false });
+        sfx.play("tap");
         setWrong(true);
         setShaking(true);
       } else if (r.status === "error") {
@@ -263,8 +323,11 @@ export default function Game({ genre }: { genre: string }) {
         setShaking(true);
       } else {
         setSuggestion(null);
-        setMsg({ text: "Not on the list. The magma surges!", ok: false });
-        setReaction({ pose: "sad", ms: 1200, key: Date.now() });
+        setMsg({ text: "Oopsie, not on the list! The lava surges", ok: false });
+        setReaction({ pose: "worried", ms: 1200, key: Date.now() });
+        combo.current = 0;
+        sfx.play("wrong");
+        window.setTimeout(() => sfx.play("surge"), 120);
         sceneState.current.surge++; // the lava heaves
         setWrong(true);
         setShaking(true);
@@ -286,8 +349,8 @@ export default function Game({ genre }: { genre: string }) {
   const danger = secsToDeath <= 10;
   const dread = Math.min(1, Math.max(0, 1 - secsToDeath / 20)); // 0 = calm, 1 = about to die
   // Cinder: a quick reaction to the last answer, else "thinking" while the AI checks, else a mood that follows the magma.
-  const mood: Pose = secsToDeath <= 8 ? "scared" : secsToDeath <= 20 ? "nervous" : "idle";
-  const pose: Pose = reaction?.pose ?? (slowCheck ? "think" : mood);
+  const mood: Pose = secsToDeath <= 8 ? "worried" : secsToDeath <= 20 ? "tense" : "idle";
+  const pose: Pose = reaction?.pose ?? (slowCheck ? "curious" : mood);
 
   // Camera: it follows the top of the stack so Cinder stays at a fixed spot on screen. The whole world moves with it,
   // magma included, so adding a block never makes the lava appear to sink.
@@ -317,10 +380,15 @@ export default function Game({ genre }: { genre: string }) {
         </div>
         <LavaCanvas stateRef={sceneState} />
         <div className="scene-vignette" />
+        <div className="fx-layer" aria-hidden>
+          {bursts.map((b) => b.items.map((it, i) => (
+            <span key={`${b.id}-${i}`} className="fx" style={{ top: b.y, "--dx": `${it.dx}px`, animationDelay: `${it.delay}ms`, fontSize: `${it.size}rem` } as React.CSSProperties}>{it.e}</span>
+          )))}
+        </div>
 
         <div className="hud">
           <div className="hud-timer">
-            <span className="hud-label">Magma reaches you in</span>
+            <span className="hud-label">Lava reaches Cinder in</span>
             <span className={`hud-time ${danger ? "hud-danger" : ""}`}>{clock(msToDeath)}</span>
             {delta && <span key={delta.key} className={`hud-delta ${delta.ok ? "delta-up" : "delta-down"}`}>{delta.text}</span>}
           </div>
@@ -338,7 +406,7 @@ export default function Game({ genre }: { genre: string }) {
               onAnimationEnd={() => setShaking(false)}
               autoComplete="off"
               autoCapitalize="off"
-              placeholder="Type an answer..."
+              placeholder="Type an answer… 🐾"
             />
           </form>
           <div className="hud-feedback" aria-live="polite">
@@ -354,22 +422,28 @@ export default function Game({ genre }: { genre: string }) {
     return (
       <main className="layout-centered">
         <div className="sky-fixed"><SkyCanvas /></div>
-        <section className="card card-intro">
-          <Link href="/" className="back-link">← All genres</Link>
+        <section className="card card-intro pop-card">
+          <Link href="/" className="back-link" onClick={() => sfx.play("tap")}>← All genres</Link>
           <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
           <p className="genre-chip">{today.genre.emoji} {today.genre.name}</p>
-          <h1 className="title-main">Pawmpeii</h1>
+          <div className="ready-prompt">
+            <span className="ready-prompt-label">Today&apos;s question</span>
+            <b>{today.prompt.text}</b>
+            {today.prompt.hint && <i>{today.prompt.hint}</i>}
+          </div>
+          {rulesSeen === false && (
+            <p className="rules-text">
+              Help Cinder climb! Every answer adds a block. Wrong answers make the lava surge, and the lava gets
+              faster the longer you last. When it catches Cinder, this genre is done for today.
+            </p>
+          )}
+          {rulesSeen === true && <p className="rules-text rules-compact">Name as many as you can. Don&apos;t let the lava catch Cinder! 🐾</p>}
           {today.streak.current > 0 && (
             <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
           )}
-          <p className="rules-text">
-            <b>One prompt per genre, every day.</b> Help Cinder the panda stay ahead of the rising magma. It speeds up the longer you last.
-            Every valid answer lifts you higher. A wrong answer makes the magma surge.
-            Once it catches you, today is over.
-          </p>
           {msg ? <p className="msg-bad">{msg.text}</p> : (
             <>
-              <div className="ready-count" key={readyIn}>{readyIn > 0 ? readyIn : "Go"}</div>
+              <div className="ready-count" key={readyIn}>{readyIn > 0 ? readyIn : "Go!"}</div>
               <p className="hint">Get ready…</p>
             </>
           )}
@@ -384,14 +458,16 @@ export default function Game({ genre }: { genre: string }) {
   const resetLocal = new Date(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1))
     .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
+  const proud = !!result && (result.standing.percentile !== null ? result.standing.percentile >= 75 : result.standing.rank === 1);
+
   return (
     <div className="over">
       <div className="sky-fixed"><SkyCanvas /></div>
       <div className="lava-fixed"><LavaCanvas stateRef={idleScene} fixedSurface={0.64} /></div>
       {result && (
         <main className="over-content">
-          <img className="over-panda" src={panda("scorched")} alt="Cinder, scorched" draggable={false} />
-          <p className="over-kicker">The magma caught Cinder</p>
+          <img className="over-panda" src={panda(proud ? "love" : "worried")} alt={proud ? "Cinder, delighted" : "Cinder, worried"} draggable={false} />
+          <p className="over-kicker">{proud ? "Pawsome run!" : "Oh no, the lava caught Cinder!"}</p>
           <div className="over-score">{result.total}</div>
           <p className="over-sub">{result.total === 1 ? "answer" : "answers"} · survived {clock(result.survivedMs)}</p>
 
@@ -409,21 +485,34 @@ export default function Game({ genre }: { genre: string }) {
 
           <section className="over-card over-tomorrow">
             <img className="sleep-panda" src={panda("sleep")} alt="Cinder asleep" draggable={false} />
-            <h2>You can play {today.genre.name} again tomorrow</h2>
-            <p className="hint">Today&apos;s {today.genre.name} run is used. Its next prompt unlocks in</p>
+            <h2>Sweet dreams, Cinder!</h2>
+            <p className="hint">You can play {today.genre.name} again tomorrow. Its next question unlocks in</p>
             <div className="over-countdown" aria-live="off">{hms(untilTomorrow)}</div>
-            <p className="hint">New prompts at midnight UTC ({resetLocal} your time)</p>
-            <Link href="/" className="btn-primary over-more">Play another genre →</Link>
+            <p className="hint">New questions at midnight UTC ({resetLocal} your time)</p>
+          </section>
+
+          <section className="over-card over-next">
+            {next && next !== "all" && (
+              <>
+                <p className="over-h">Up next</p>
+                <Link href={`/play/${next.id}`} className="btn-primary over-more" onClick={() => sfx.play("tap")}>
+                  {next.emoji} {next.name} →
+                </Link>
+                <p className="hint">{next.prompt}</p>
+              </>
+            )}
+            {next === "all" && <p className="over-all-done">🎉 You&apos;ve played every genre today! See you tomorrow.</p>}
+            <Link href="/" className="over-allgenres" onClick={() => sfx.play("tap")}>See all genres</Link>
           </section>
 
           <section className="over-card">
-            <h3 className="over-h">Today&apos;s prompt</h3>
+            <h3 className="over-h">Your answers</h3>
             <p className="over-prompt">{today.prompt.text}</p>
             {answersInOrder.length > 0 ? (
               <ul className="chips">
                 {answersInOrder.map((a, i) => <li key={`${i}-${a.name}`} className={`chip-item r${a.rarity}`}>{a.name}</li>)}
               </ul>
-            ) : <p className="hint">You didn&apos;t get an answer in this time.</p>}
+            ) : <p className="hint">No answers this time, Cinder believes in you!</p>}
           </section>
 
           <section className="over-card">
