@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { RunEvent } from "./magma";
@@ -50,13 +52,47 @@ export interface Store {
   leaderboard(scope: "daily" | "all", date: string, limit: number): Promise<BoardEntry[]>;
 }
 
+/**
+ * Local-development store. Sessions and scores live in memory (so a restart gives you a fresh day),
+ * but LLM verdicts are saved to a file so answers you have already paid to check are never checked again.
+ * In production the same job is done by the `verdicts` table in Supabase.
+ */
 class MemoryStore implements Store {
-  verdicts = new Map<string, Verdict>();
+  private verdictFile = process.env.VERDICT_FILE || ".data/verdicts.json";
+  private persist = process.env.NODE_ENV !== "test";
+  private writeTimer: ReturnType<typeof setTimeout> | null = null;
+  verdicts = new Map<string, Verdict>(this.load());
+
+  private load(): [string, Verdict][] {
+    if (!this.persist) return [];
+    try {
+      return existsSync(this.verdictFile) ? Object.entries(JSON.parse(readFileSync(this.verdictFile, "utf8"))) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private save() {
+    if (!this.persist || this.writeTimer) return;
+    this.writeTimer = setTimeout(() => {
+      this.writeTimer = null;
+      try {
+        mkdirSync(dirname(this.verdictFile), { recursive: true });
+        writeFileSync(this.verdictFile, JSON.stringify(Object.fromEntries(this.verdicts), null, 1));
+      } catch {
+        // Read-only filesystem (some hosts): the in-memory cache still works.
+      }
+    }, 500);
+  }
+
   sessions = new Map<string, Session>();
   scores = new Map<string, ScoreRow>();
 
   async getVerdict(p: string, n: string) { return this.verdicts.get(`${p}:${n}`) ?? null; }
-  async setVerdict(p: string, n: string, v: Verdict) { this.verdicts.set(`${p}:${n}`, v); }
+  async setVerdict(p: string, n: string, v: Verdict) {
+    this.verdicts.set(`${p}:${n}`, v);
+    this.save();
+  }
   async getSession(d: string, id: string) {
     const s = this.sessions.get(`${d}:${id}`);
     return s ? structuredClone(s) : null;
