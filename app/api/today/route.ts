@@ -23,10 +23,10 @@ export async function GET(req: Request) {
   const { id, text, hint } = prompt;
   after(() => ensureAnswerList(prompt)); // build today's answer list in the background if it doesn't exist yet
 
-  const { id: genreId, name, emoji } = genreById(genre)!;
+  const { id: genreId, name } = genreById(genre)!;
   return NextResponse.json({
     date,
-    genre: { id: genreId, name, emoji },
+    genre: { id: genreId, name },
     prompt: { id, text, hint },
     streak: computeStreak(dates, date),
     started: session.startedAt !== null,

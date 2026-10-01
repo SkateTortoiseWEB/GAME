@@ -50,7 +50,7 @@ const TILE = 1700; // stars repeat vertically, so the sky never runs out as you 
 
 /**
  * The night sky: twinkling stars in three depths, constellations (one of them a panda), a crescent moon and the
- * occasional shooting star. It drifts down slowly as the camera climbs, which makes the tower feel tall.
+ * occasional shooting star, on a flat dark background. It drifts down slowly as the camera climbs, which makes the tower feel tall.
  */
 export default function SkyCanvas({ stateRef }: { stateRef?: React.MutableRefObject<SceneState> }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -73,7 +73,6 @@ export default function SkyCanvas({ stateRef }: { stateRef?: React.MutableRefObj
         warm: rand() < 0.2 ? 1 : 0,
       })),
     }));
-    const dust = Array.from({ length: 5 }, () => ({ x: rand(), y: rand() * 900, r: 200 + rand() * 260, hue: rand() < 0.5 ? "90,40,150" : "150,40,90" }));
     let shoot: { x: number; y: number; vx: number; vy: number; age: number } | null = null;
     let nextShoot = 4 + rand() * 6;
     let t = 0;
@@ -93,21 +92,8 @@ export default function SkyCanvas({ stateRef }: { stateRef?: React.MutableRefObj
       const dread = st?.dread ?? 0;
       const shift = cam * 0.22;
 
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, "#03040c");
-      sky.addColorStop(0.55, "#0b0a23");
-      sky.addColorStop(1, "#1d0d25");
-      ctx.fillStyle = sky;
+      ctx.fillStyle = "#0e0d12"; // a flat, near-black night: the stars do the work
       ctx.fillRect(0, 0, W, H);
-
-      for (const d of dust) { // faint nebula clouds
-        const y = d.y + shift * 0.3 - 200;
-        const g = ctx.createRadialGradient(d.x * W, y, 0, d.x * W, y, d.r);
-        g.addColorStop(0, `rgba(${d.hue},0.16)`);
-        g.addColorStop(1, `rgba(${d.hue},0)`);
-        ctx.fillStyle = g;
-        ctx.fillRect(d.x * W - d.r, y - d.r, d.r * 2, d.r * 2);
-      }
 
       for (const l of layers) {
         for (const s of l.stars) {

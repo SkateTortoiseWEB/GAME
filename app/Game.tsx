@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deathTime, MAGMA, stateAt, type RunEvent } from "@/lib/magma";
 import Link from "next/link";
 import { sfx } from "./audio/sfx";
+import SoundToggle from "./audio/SoundToggle";
 import { hms, msUntilTomorrow } from "./time";
 import LavaCanvas from "./scene/LavaCanvas";
 import SkyCanvas from "./scene/SkyCanvas";
@@ -13,7 +14,7 @@ interface Standing { rank: number | null; players: number; percentile: number | 
 interface Result { total: number; survivedMs: number; standing: Standing }
 interface Today {
   date: string;
-  genre: { id: string; name: string; emoji: string };
+  genre: { id: string; name: string };
   prompt: { id: string; text: string; hint?: string };
   streak: { current: number; best: number };
   started: boolean;
@@ -44,23 +45,25 @@ const panda = (pose: Pose) => `/panda/${pose}.png`;
 
 const RARITY_LABEL = ["", "RARE", "ULTRA RARE", "INSANELY RARE"];
 
-/** Sparkles that float up from Cinder when an answer is accepted: bigger and brighter for rarer answers. */
-interface Burst { id: number; y: number; items: { e: string; dx: number; delay: number; size: number }[] }
-const BURST_SETS = [["💖", "✨", "🐾"], ["⭐", "✨", "💛"], ["💜", "✨", "💫"], ["🌈", "⭐", "💖", "✨", "💜"]];
+/** Sparkles that float up from Cinder when an answer is accepted: more of them, and brighter, for rarer answers. */
+interface Burst { id: number; y: number; items: { glyph: string; color: string; dx: number; delay: number; size: number }[] }
+const BURST_GLYPHS = ["\u2665", "\u2726", "\u2605"]; // heart, four-point star, star (plain symbols, not emoji)
+const BURST_COLORS = [["#ff9ec7", "#fff1dc"], ["#ffd86b", "#fff1dc"], ["#c9a0ff", "#ffd86b"], ["#ff8aa0", "#ffd86b", "#8be9ad", "#9fd8ff", "#c9a0ff"]];
 const BURST_COUNT = [5, 7, 9, 13];
 let burstId = 0;
 const makeBurst = (tier: number, y: number): Burst => ({
   id: ++burstId,
   y,
   items: Array.from({ length: BURST_COUNT[tier] }, (_, i) => ({
-    e: BURST_SETS[tier][i % BURST_SETS[tier].length],
+    glyph: BURST_GLYPHS[i % BURST_GLYPHS.length],
+    color: BURST_COLORS[tier][i % BURST_COLORS[tier].length],
     dx: Math.round((Math.random() - 0.5) * (90 + tier * 40)),
     delay: Math.round(Math.random() * 160),
     size: 0.9 + Math.random() * 0.7 + tier * 0.15,
   })),
 });
 
-interface NextGenre { id: string; name: string; emoji: string; prompt: string }
+interface NextGenre { id: string; name: string; prompt: string }
 /** Shorter than this and the answer was checked locally, so there is nothing to show. */
 const SLOW_CHECK_MS = 150;
 
@@ -154,7 +157,7 @@ export default function Game({ genre }: { genre: string }) {
   // On the game-over screen: work out which genre to suggest next, and play the "caught" sounds.
   useEffect(() => {
     if (phase !== "done" || !result) return;
-    fetch("/api/home").then((r) => r.json()).then((h: { genres: { id: string; name: string; emoji: string; prompt: string; status: string }[] }) => {
+    fetch("/api/home").then((r) => r.json()).then((h: { genres: { id: string; name: string; prompt: string; status: string }[] }) => {
       const open = h.genres.filter((g) => g.id !== genre && g.status !== "done");
       setNext(open.length ? open[0] : "all");
     });
@@ -266,7 +269,7 @@ export default function Game({ genre }: { genre: string }) {
     // Only if the check takes a moment (i.e. it has gone to the AI) does the typed word change colour.
     const slowTimer = setTimeout(() => {
       setSlowCheck(true);
-      setMsg({ text: "Thinking…", ok: false, checking: true });
+      setMsg({ text: "Checking…", ok: false, checking: true });
     }, SLOW_CHECK_MS);
     queue.current = queue.current.then(async () => {
       const prevLeft = deathTime(eventsRef.current) - (Date.now() - anchor.current);
@@ -291,7 +294,7 @@ export default function Game({ genre }: { genre: string }) {
       if (r.dead || r.status === "dead") { setChecking(false); finish(); return; }
       if (r.status === "valid") {
         const tier: number = r.rarity ?? 0;
-        setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]}! ${r.canonical}` : `Yay! ${r.canonical}`, ok: true, tier });
+        setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]}: ${r.canonical}` : `+1 ${r.canonical}`, ok: true, tier });
         setReaction(tier > 0 ? { pose: "cheer", ms: 1600, key: Date.now() } : { pose: "jump", ms: 900, key: Date.now() });
         combo.current += 1;
         sfx.play(tier > 0 ? (`rare${tier}` as "rare1" | "rare2" | "rare3") : "pop", { combo: combo.current - 1 });
@@ -307,12 +310,12 @@ export default function Game({ genre }: { genre: string }) {
         // A fixed typo is only offered, never accepted, and costs nothing.
         setSuggestion(r.canonical);
         setWrong(false);
-        setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept 🐾`, ok: false });
+        setMsg({ text: `Did you mean ${r.canonical}? Press Enter to accept.`, ok: false });
         setReaction({ pose: "shy", ms: 1200, key: Date.now() });
         sfx.play("suggest");
       } else if (r.status === "duplicate") {
         setSuggestion(null);
-        setMsg({ text: `Already got ${r.canonical}!`, ok: false });
+        setMsg({ text: `You already have ${r.canonical}.`, ok: false });
         sfx.play("tap");
         setWrong(true);
         setShaking(true);
@@ -323,7 +326,7 @@ export default function Game({ genre }: { genre: string }) {
         setShaking(true);
       } else {
         setSuggestion(null);
-        setMsg({ text: "Oopsie, not on the list! The lava surges", ok: false });
+        setMsg({ text: "Not on the list. The lava surges.", ok: false });
         setReaction({ pose: "worried", ms: 1200, key: Date.now() });
         combo.current = 0;
         sfx.play("wrong");
@@ -382,7 +385,7 @@ export default function Game({ genre }: { genre: string }) {
         <div className="scene-vignette" />
         <div className="fx-layer" aria-hidden>
           {bursts.map((b) => b.items.map((it, i) => (
-            <span key={`${b.id}-${i}`} className="fx" style={{ top: b.y, "--dx": `${it.dx}px`, animationDelay: `${it.delay}ms`, fontSize: `${it.size}rem` } as React.CSSProperties}>{it.e}</span>
+            <span key={`${b.id}-${i}`} className="fx" style={{ top: b.y, color: it.color, "--dx": `${it.dx}px`, animationDelay: `${it.delay}ms`, fontSize: `${it.size}rem` } as React.CSSProperties}>{it.glyph}</span>
           )))}
         </div>
 
@@ -393,7 +396,7 @@ export default function Game({ genre }: { genre: string }) {
             {delta && <span key={delta.key} className={`hud-delta ${delta.ok ? "delta-up" : "delta-down"}`}>{delta.text}</span>}
           </div>
 
-          <p className="hud-genre">{today.genre.emoji} {today.genre.name}</p>
+          <p className="hud-genre">{today.genre.name}</p>
           <h2 className="hud-prompt">{today.prompt.text}</h2>
           {today.prompt.hint && <p className="hud-hint">{today.prompt.hint}</p>}
 
@@ -406,13 +409,14 @@ export default function Game({ genre }: { genre: string }) {
               onAnimationEnd={() => setShaking(false)}
               autoComplete="off"
               autoCapitalize="off"
-              placeholder="Type an answer… 🐾"
+              placeholder="Type an answer"
             />
           </form>
           <div className="hud-feedback" aria-live="polite">
             <span className={`msg-text ${msg?.checking ? "msg-checking" : msg?.ok ? (msg.tier ? `msg-r${msg.tier}` : "msg-ok") : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
             <span className="hud-count"><b>{s.valid}</b> accepted</span>
           </div>
+          <div className="hud-foot"><SoundToggle /></div>
         </div>
       </div>
     );
@@ -422,31 +426,27 @@ export default function Game({ genre }: { genre: string }) {
     return (
       <main className="layout-centered">
         <div className="sky-fixed"><SkyCanvas /></div>
-        <section className="card card-intro pop-card">
-          <Link href="/" className="back-link" onClick={() => sfx.play("tap")}>← All genres</Link>
+        <section className="card card-intro">
+          <Link href="/" className="back-link" onClick={() => sfx.play("tap")}>Back to all genres</Link>
           <img className="ready-panda" src={panda("idle")} alt="Cinder the panda" draggable={false} />
-          <p className="genre-chip">{today.genre.emoji} {today.genre.name}</p>
-          <div className="ready-prompt">
-            <span className="ready-prompt-label">Today&apos;s question</span>
-            <b>{today.prompt.text}</b>
-            {today.prompt.hint && <i>{today.prompt.hint}</i>}
-          </div>
+          <h1>{today.genre.name}</h1>
+          <h2 className="ready-question">{today.prompt.text}</h2>
+          {today.prompt.hint && <p className="ready-hint">{today.prompt.hint}</p>}
           {rulesSeen === false && (
             <p className="rules-text">
-              Help Cinder climb! Every answer adds a block. Wrong answers make the lava surge, and the lava gets
-              faster the longer you last. When it catches Cinder, this genre is done for today.
+              Every answer adds a block and lifts Cinder higher. Wrong answers make the lava surge, and it rises faster the longer you last.
+              When it catches Cinder, this genre is done for today.
             </p>
           )}
-          {rulesSeen === true && <p className="rules-text rules-compact">Name as many as you can. Don&apos;t let the lava catch Cinder! 🐾</p>}
-          {today.streak.current > 0 && (
-            <div className="streak-badge"><span className="fire-icon">🔥</span> {today.streak.current}-Day Streak</div>
-          )}
+          {rulesSeen === true && <p className="rules-text">Name as many as you can before the lava catches Cinder.</p>}
+          {today.streak.current > 0 && <p className="streak">{today.streak.current} day streak</p>}
           {msg ? <p className="msg-bad">{msg.text}</p> : (
             <>
-              <div className="ready-count" key={readyIn}>{readyIn > 0 ? readyIn : "Go!"}</div>
-              <p className="hint">Get ready…</p>
+              <div className="ready-count" key={readyIn}>{readyIn > 0 ? readyIn : "Go"}</div>
+              <p className="hint">Starting in a moment</p>
             </>
           )}
+          <SoundToggle />
         </section>
       </main>
     );
@@ -467,7 +467,7 @@ export default function Game({ genre }: { genre: string }) {
       {result && (
         <main className="over-content">
           <img className="over-panda" src={panda(proud ? "love" : "worried")} alt={proud ? "Cinder, delighted" : "Cinder, worried"} draggable={false} />
-          <p className="over-kicker">{proud ? "Pawsome run!" : "Oh no, the lava caught Cinder!"}</p>
+          <p className="over-kicker">{proud ? "Great run" : "The lava caught Cinder"}</p>
           <div className="over-score">{result.total}</div>
           <p className="over-sub">{result.total === 1 ? "answer" : "answers"} · survived {clock(result.survivedMs)}</p>
 
@@ -477,16 +477,16 @@ export default function Game({ genre }: { genre: string }) {
               : <>Rank <b>#{result.standing.rank}</b> of {result.standing.players} today</>}
           </p>
           {today.streak.current > 0 && (
-            <div className="streak-summary">
-              <span className="fire-icon">🔥</span> {today.streak.current}-Day Streak
-              {today.streak.best > today.streak.current ? <span className="streak-best">(Best: {today.streak.best})</span> : ""}
-            </div>
+            <p className="streak">
+              {today.streak.current} day streak
+              {today.streak.best > today.streak.current ? <span className="streak-best">best {today.streak.best}</span> : ""}
+            </p>
           )}
 
           <section className="over-card over-tomorrow">
             <img className="sleep-panda" src={panda("sleep")} alt="Cinder asleep" draggable={false} />
-            <h2>Sweet dreams, Cinder!</h2>
-            <p className="hint">You can play {today.genre.name} again tomorrow. Its next question unlocks in</p>
+            <h2>Come back tomorrow</h2>
+            <p className="hint">You can play {today.genre.name} again tomorrow. The next question unlocks in</p>
             <div className="over-countdown" aria-live="off">{hms(untilTomorrow)}</div>
             <p className="hint">New questions at midnight UTC ({resetLocal} your time)</p>
           </section>
@@ -496,12 +496,12 @@ export default function Game({ genre }: { genre: string }) {
               <>
                 <p className="over-h">Up next</p>
                 <Link href={`/play/${next.id}`} className="btn-primary over-more" onClick={() => sfx.play("tap")}>
-                  {next.emoji} {next.name} →
+                  {next.name}
                 </Link>
                 <p className="hint">{next.prompt}</p>
               </>
             )}
-            {next === "all" && <p className="over-all-done">🎉 You&apos;ve played every genre today! See you tomorrow.</p>}
+            {next === "all" && <p className="over-all-done">You have played every genre today.</p>}
             <Link href="/" className="over-allgenres" onClick={() => sfx.play("tap")}>See all genres</Link>
           </section>
 
@@ -512,7 +512,7 @@ export default function Game({ genre }: { genre: string }) {
               <ul className="chips">
                 {answersInOrder.map((a, i) => <li key={`${i}-${a.name}`} className={`chip-item r${a.rarity}`}>{a.name}</li>)}
               </ul>
-            ) : <p className="hint">No answers this time, Cinder believes in you!</p>}
+            ) : <p className="hint">No answers this time.</p>}
           </section>
 
           <section className="over-card">
@@ -534,6 +534,7 @@ export default function Game({ genre }: { genre: string }) {
               <div className="rank-outlier">Your rank: <b>#{board.you.rank}</b> ({board.you.total} answers)</div>
             )}
           </section>
+          <SoundToggle />
         </main>
       )}
     </div>

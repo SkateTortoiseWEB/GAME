@@ -21,7 +21,7 @@ export default function SoundToggle() {
       aria-pressed={!muted}
       onClick={() => { sfx.toggle(); if (!sfx.isMuted()) sfx.play("tap"); }}
     >
-      {muted ? "🔇" : "🔊"}
+      {muted ? "Sound off" : "Sound on"}
     </button>
   );
 }

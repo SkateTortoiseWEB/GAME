@@ -1,6 +1,6 @@
 # Pawmpeii
 
-A daily word game with eight **genres** (Animals & Nature, Food & Drink, Places, Movies & TV, Music, Games, Words & Names, Everything Else).
+A daily word game with six **genres** (Animals & Nature, Places, Movies & TV, Music, Words & Names, Everything Else).
 Every genre has its own prompt each day, the same for everyone, and one run per genre per day. Name as many valid answers as you can while
 magma rises. Each accepted answer adds a stone to your stack. A wrong answer makes the magma surge (typo suggestions and duplicates cost
 nothing). The magma speeds up the longer you last, so nobody survives forever. Once it catches you, that genre is over for the day. Score =
@@ -37,10 +37,15 @@ wrong answers are a soft wobbly boop with a lava gurgle, there is a countdown, a
 wah-wah and lullaby. Audio unlocks on the first tap or key press; the speaker button (bottom right) mutes and remembers the choice.
 
 ## The look and flow
-Rounded fonts, squishy buttons, biscuit blocks with paw prints and sparkles floating up from Cinder on every accepted answer all live in the
-"Cute theme" block at the end of `app/globals.css`. The home screen shows each genre's question as a teaser, a big "Start here / Up next /
-Continue" banner, and a paw tracker for today. After a run, the game-over screen suggests the next unplayed genre. The first visit to a
-genre shows the full rules; later visits show a one-liner. Opening the home screen also builds all eight answer lists in the background.
+The design is deliberately plain: flat solid surfaces, one accent colour (the orange of the lava and Cinder's scarf), a rounded system
+font, no icons or emoji, and a fixed spacing scale (`--s1` to `--s6` in `app/globals.css`). Text contrast is at least 4.5:1 and borders at
+least 3:1 against their backgrounds. Things to keep out when changing it: gradient text, glass or blurred cards, coloured left borders, badges
+above headlines, scroll-triggered fade-ins, hover effects that fade, and em dashes in copy. The only gradients are gameplay colours (the gold,
+purple and rainbow rarity blocks) and the scrim behind the timer.
+
+The home screen shows every genre at once with no scrolling at any screen size: each card has the genre, today's question and its status,
+and the next unplayed genre is outlined. After a run, the game-over screen suggests the next unplayed genre. The first visit to a genre shows
+the full rules; later visits show a one-liner. Opening the home screen also builds all the answer lists in the background.
 
 ## Cinder the panda
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in

@@ -27,9 +27,11 @@ describe("genre definitions", () => {
 
   it("validates genre ids", () => {
     expect(isGenre("music")).toBe(true);
+    expect(isGenre("games")).toBe(false);
+    expect(isGenre("food")).toBe(false);
     expect(isGenre("nope")).toBe(false);
     expect(isGenre(undefined)).toBe(false);
-    expect(genreById("food")?.name).toBe("Food & Drink");
+    expect(genreById("places")?.name).toBe("Places");
   });
 });
 

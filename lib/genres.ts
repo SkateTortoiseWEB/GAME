@@ -6,44 +6,34 @@
 export interface Genre {
   id: string;
   name: string;
-  emoji: string;
-  blurb: string;
   categories: string[];
   niche: string[];
 }
 
 export const GENRES: Genre[] = [
   {
-    id: "nature", name: "Animals & Nature", emoji: "🐾", blurb: "Creatures, plants and the great outdoors",
+    id: "nature", name: "Animals & Nature",
     categories: ["animals", "plants"], niche: ["birds", "flowers", "trees", "insects", "african-animals"],
   },
   {
-    id: "food", name: "Food & Drink", emoji: "🍜", blurb: "Everything edible and drinkable",
-    categories: ["foods"], niche: ["savory", "desserts", "drinks", "kitchen"],
-  },
-  {
-    id: "places", name: "Places", emoji: "🌍", blurb: "Cities, rivers, mountains and islands",
+    id: "places", name: "Places",
     categories: ["cities"], niche: ["european-cities", "us-cities", "rivers", "mountains", "islands"],
   },
   {
-    id: "screen", name: "Movies & TV", emoji: "🎬", blurb: "Films, shows and the characters in them",
+    id: "screen", name: "Movies & TV",
     categories: ["movies", "tv-shows", "fictional-characters"], niche: ["number-movies", "superheroes"],
   },
   {
-    id: "music", name: "Music", emoji: "🎵", blurb: "Songs and the bands who play them",
+    id: "music", name: "Music",
     categories: ["songs", "bands"], niche: ["color-songs", "number-songs", "the-bands"],
   },
   {
-    id: "games", name: "Games", emoji: "🎮", blurb: "Video games and the worlds inside them",
-    categories: ["video-games"], niche: ["pokemon", "video-game-characters", "minecraft"],
-  },
-  {
-    id: "words", name: "Words & Names", emoji: "🔤", blurb: "Verbs, jobs, names and more",
+    id: "words", name: "Words & Names",
     categories: ["verbs", "adjectives", "jobs", "boys-names", "girls-names", "surnames"], niche: ["noun-verbs"],
   },
   {
-    id: "everything", name: "Everything Else", emoji: "🎲", blurb: "Brands, colours, shapes and odd ones",
-    categories: ["brands"], niche: ["red-things", "yellow-things", "green-things", "fly", "wheels", "wear", "round", "garage", "school", "sports"],
+    id: "everything", name: "Everything Else",
+    categories: ["brands"], niche: ["kitchen", "red-things", "yellow-things", "green-things", "fly", "wheels", "wear", "round", "garage", "school", "sports"],
   },
 ];
 

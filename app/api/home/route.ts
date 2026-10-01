@@ -24,7 +24,7 @@ export async function GET() {
     const session = sessions.find((s) => s.genre === g.id);
     if (!score && session?.startedAt != null) score = await finalizeIfDead(session); // a run they walked away from still ends on schedule
     const prompt = promptForDate(date, g.id).text;
-    const base = { id: g.id, name: g.name, emoji: g.emoji, blurb: g.blurb, prompt };
+    const base = { id: g.id, name: g.name, prompt };
     if (score) {
       const standing = await standingFor(score);
       return { ...base, status: "done" as const, total: score.total, rank: standing.rank, players: standing.players };
