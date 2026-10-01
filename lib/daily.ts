@@ -1,7 +1,7 @@
 import { PROMPTS, type PromptDef } from "@/data/prompts";
 
 export const PROMPTS_PER_DAY = 5;
-export const ROUND_SECONDS = 60;
+export const ROUND_SECONDS = 30;
 export const GRACE_MS = 2500;
 
 export function todayKey(now = new Date()): string {

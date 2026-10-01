@@ -1,6 +1,6 @@
 # ListDive
 
-Daily list-naming game: 5 categories a day, 60 seconds each, name as many valid members as you can.
+Daily list-naming game: 5 categories a day, 30 seconds each, name as many valid members as you can.
 One point per unique valid answer. Global daily and all-time rankings.
 
 ## How answers are checked (hybrid)
