@@ -325,10 +325,47 @@ button {
   30%, 50%, 70% { transform: translateX(-6px); }
   40%, 60% { transform: translateX(6px); }
 }
-/* Placeholder scene for the run (magma / stack / runner). Replace with real art. */
-.arena { position: relative; height: 240px; margin-bottom: 20px; border-radius: var(--radius-md); background: var(--bg-color); border: 1px solid var(--border); overflow: hidden; }
-.arena-stack { position: absolute; bottom: 0; left: 50%; width: 64px; margin-left: -32px; background: repeating-linear-gradient(0deg, #4a3f36 0 14px, #3a322b 14px 16px); transition: height 0.25s ease-out; }
-.arena-runner { position: absolute; left: 50%; width: 18px; height: 28px; margin-left: -9px; border-radius: 9px 9px 3px 3px; background: var(--text-main); transition: bottom 0.25s ease-out; }
-.arena-magma { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, #7a1500, var(--accent) 70%, var(--warning)); box-shadow: 0 -6px 18px rgba(255, 90, 0, 0.6); transition: height 0.2s linear; }
-.arena-danger { border-color: var(--error); animation: pulse 0.6s infinite; }
+/* The run: a full-screen scene. The magma fills the screen from the bottom, the player stands on a tower of word boxes. */
+.scene { position: fixed; inset: 0; overflow: hidden; background: #0d0a09; }
+.scene-cave { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, #2a1a12 0%, #120d0b 60%, #0a0706 100%); }
+
+.tower, .box { position: absolute; left: 50%; width: min(240px, 70vw); margin-left: calc(min(240px, 70vw) / -2); }
+.tower { background: repeating-linear-gradient(0deg, #3a322b 0 36px, #2e2823 36px 38px); border: 1px solid #4a3f36; border-bottom: none; }
+.box {
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #6b5a4a, #54463a);
+  border: 2px solid #8a7560; border-radius: 6px;
+  color: #f4efeb; font-weight: 700; font-size: 0.95rem; padding: 0 10px;
+  box-shadow: 0 2px 0 #2a211a;
+}
+.box span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.drop-in { animation: dropIn 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes dropIn { from { opacity: 0; margin-bottom: 26px; } to { opacity: 1; margin-bottom: 0; } }
+
+.runner { position: absolute; left: 50%; width: 20px; height: 32px; margin-left: -10px; border-radius: 10px 10px 4px 4px; background: var(--text-main); box-shadow: 0 0 12px rgba(255, 240, 220, 0.5); }
+
+.scene-magma {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(0deg, #4d0c00 0%, #b52a00 35%, var(--accent) 80%, #ffb347 100%);
+  border-top: 4px solid #ffd27a;
+  box-shadow: 0 -10px 40px rgba(255, 90, 0, 0.7), 0 -2px 90px rgba(255, 60, 0, 0.45);
+  transition: height 0.12s linear;
+}
+.scene-vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 calc(40px + var(--dread, 0) * 160px) rgba(255, 30, 30, calc(var(--dread, 0) * 0.6)); }
+
+/* Everything the player reads and types sits on top of the scene. */
+.hud { position: absolute; top: 0; left: 0; right: 0; padding: 14px 16px 18px; max-width: 560px; margin: 0 auto; background: linear-gradient(180deg, rgba(10, 7, 6, 0.92) 55%, rgba(10, 7, 6, 0)); }
+.hud-timer { position: relative; display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-bottom: 4px; }
+.hud-label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.hud-time { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hud-danger { color: var(--error); animation: pulse 0.6s infinite; }
+.hud-delta { position: absolute; right: 0; top: -2px; font-weight: 800; animation: floatUp 1s ease-out forwards; }
+.delta-up { color: var(--success); }
+.delta-down { color: var(--error); }
+@keyframes floatUp { from { opacity: 1; transform: translateY(6px); } to { opacity: 0; transform: translateY(-14px); } }
+.hud-prompt { font-size: 1.4rem; text-align: center; line-height: 1.2; text-wrap: balance; margin-bottom: 2px; }
+.hud-hint { text-align: center; color: var(--text-muted); font-style: italic; font-size: 0.9rem; }
+.hud form { margin-top: 10px; }
+.hud-feedback { display: flex; justify-content: space-between; gap: 12px; min-height: 22px; margin-top: 6px; }
+.hud-count { color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; }
 .standing { font-size: 1.15rem; margin-bottom: 4px; }

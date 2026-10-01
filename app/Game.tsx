@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deathTime, stateAt, type RunEvent } from "@/lib/magma";
+import { deathTime, MAGMA, stateAt, type RunEvent } from "@/lib/magma";
 
 interface Standing { rank: number | null; players: number; percentile: number | null }
 interface Result { total: number; survivedMs: number; standing: Standing }
@@ -20,6 +20,13 @@ type Phase = "loading" | "intro" | "playing" | "done";
 const post = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 
+/** Pixels per unit of height in the scene. */
+const UNIT = 38;
+/** Where the player sits on screen, as a share of the scene height measured from the bottom. */
+const PLAYER_AT = 0.5;
+/** Height of the magma pool visible under the tower from the very start. */
+const FLOOR = 72;
+
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 export default function Game() {
@@ -34,6 +41,8 @@ export default function Game() {
   const [wrong, setWrong] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
+  const [sceneH, setSceneH] = useState(700);
+  const [delta, setDelta] = useState<{ text: string; ok: boolean; key: number } | null>(null);
   const [board, setBoard] = useState<{ entries: Entry[]; you: Entry | null } | null>(null);
   const [scope, setScope] = useState<"daily" | "all">("daily");
   const anchor = useRef(0); // Date.now() minus elapsed run time
@@ -41,6 +50,7 @@ export default function Game() {
   const finishing = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const inputRef = useRef<HTMLInputElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
 
   const applyServerState = useCallback((evs: RunEvent[], elapsedMs: number) => {
     eventsRef.current = evs;
@@ -92,6 +102,14 @@ export default function Game() {
     return () => clearInterval(timer);
   }, [phase, finish]);
 
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const measure = () => setSceneH(sceneRef.current?.clientHeight ?? window.innerHeight);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [phase]);
+
   async function begin() {
     const r = await post("/api/run");
     if (r.error) { setMsg({ text: r.error, ok: false }); return; }
@@ -106,8 +124,15 @@ export default function Game() {
     if (!text || phase !== "playing" || checking) return;
     setChecking(true);
     queue.current = queue.current.then(async () => {
+      const prevLeft = deathTime(eventsRef.current) - (Date.now() - anchor.current);
       const r = await post("/api/answer", { answer: text });
-      if (r.events) applyServerState(r.events, r.elapsedMs);
+      if (r.events) {
+        applyServerState(r.events, r.elapsedMs);
+        const change = (deathTime(r.events) - r.elapsedMs) - prevLeft;
+        if (r.status === "valid" || r.status === "invalid") {
+          setDelta({ text: `${change >= 0 ? "+" : "−"}${(Math.abs(change) / 1000).toFixed(1)}s`, ok: change >= 0, key: Date.now() });
+        }
+      }
       if (r.dead || r.status === "dead") { setChecking(false); finish(); return; }
       if (r.status === "valid") {
         setMsg({ text: `+1 • ${r.canonical}`, ok: true });
@@ -145,13 +170,72 @@ export default function Game() {
   }
 
   const s = stateAt(events, t);
-  const answers = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "").reverse();
-  const heat = Math.min(100, s.valid);
-  const viewMax = Math.max(24, s.stack + 6);
-  const danger = s.margin <= 3;
+  const words = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "");
+  // Time until the magma reaches you if you stopped answering right now.
+  const msToDeath = Math.max(0, deathTime(events) - t);
+  const secsToDeath = msToDeath / 1000;
+  const danger = secsToDeath <= 10;
+  const dread = Math.min(1, Math.max(0, 1 - secsToDeath / 20)); // 0 = calm, 1 = about to die
+
+  // Camera: follow the top of the stack so the player stays at a fixed spot on screen.
+  const stackPx = FLOOR + s.stack * UNIT;
+  const cam = Math.max(0, stackPx - sceneH * PLAYER_AT);
+  const magmaPx = Math.min(sceneH, Math.max(0, FLOOR + s.level * UNIT - cam));
+  const onScreen = (bottom: number) => bottom > -UNIT && bottom < sceneH;
+
+  if (phase === "playing") {
+    return (
+      <div className="scene" ref={sceneRef} style={{ "--dread": dread } as React.CSSProperties}>
+        <div className="scene-cave" />
+
+        <div className="tower" style={{ bottom: FLOOR - cam, height: MAGMA.base * UNIT }} />
+        {words.map((w, i) => {
+          const bottom = FLOOR + (MAGMA.base + i * MAGMA.stone) * UNIT - cam;
+          if (!onScreen(bottom)) return null;
+          return (
+            <div key={`${i}-${w}`} className="box drop-in" style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
+              <span>{w}</span>
+            </div>
+          );
+        })}
+        <div className="runner" style={{ bottom: stackPx - cam }} />
+
+        <div className="scene-magma" style={{ height: magmaPx }} />
+        <div className="scene-vignette" />
+
+        <div className="hud">
+          <div className="hud-timer">
+            <span className="hud-label">Magma reaches you in</span>
+            <span className={`hud-time ${danger ? "hud-danger" : ""}`}>{clock(msToDeath)}</span>
+            {delta && <span key={delta.key} className={`hud-delta ${delta.ok ? "delta-up" : "delta-down"}`}>{delta.text}</span>}
+          </div>
+
+          <h2 className="hud-prompt">{today.prompt.text}</h2>
+          {today.prompt.hint && <p className="hud-hint">{today.prompt.hint}</p>}
+
+          <form onSubmit={send}>
+            <input
+              ref={inputRef}
+              className={`input-box ${wrong ? "is-wrong" : ""} ${suggestion ? "is-suggest" : ""} ${shaking ? "is-shaking" : ""}`}
+              value={input}
+              onChange={(e) => { setInput(e.target.value); setWrong(false); setSuggestion(null); setMsg(null); }}
+              onAnimationEnd={() => setShaking(false)}
+              autoComplete="off"
+              autoCapitalize="off"
+              placeholder="Type an answer..."
+            />
+          </form>
+          <div className="hud-feedback" aria-live="polite">
+            <span className={`msg-text ${msg?.ok ? "msg-ok" : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
+            <span className="hud-count"><b>{s.valid}</b> accepted</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <main className={phase === "playing" ? "layout-top" : "layout-centered"} style={{ "--heat": heat } as React.CSSProperties}>
+    <main className="layout-centered" style={{ "--heat": Math.min(100, s.valid) } as React.CSSProperties}>
       <div className="ambient-background" />
 
       {phase === "intro" && (
@@ -167,49 +251,6 @@ export default function Game() {
           </p>
           <button className="btn-primary btn-large" onClick={begin}>Start today&apos;s run</button>
           {msg && <p className="msg-bad">{msg.text}</p>}
-        </section>
-      )}
-
-      {phase === "playing" && (
-        <section className="card card-reactive">
-          <header className="play-header">
-            <div className="round-indicator">Survived</div>
-            <div className={`timer ${danger ? "timer-danger" : ""}`}>{clock(t)}</div>
-          </header>
-
-          {/* Placeholder scene: the magma level, the stack of stones, and the player on top. */}
-          <div className={`arena ${danger ? "arena-danger" : ""}`} aria-label={`Magma level ${s.level.toFixed(1)}, your height ${s.stack}`}>
-            <div className="arena-stack" style={{ height: `${(s.stack / viewMax) * 100}%` }} />
-            <div className="arena-runner" style={{ bottom: `${(s.stack / viewMax) * 100}%` }} />
-            <div className="arena-magma" style={{ height: `${Math.min(100, (s.level / viewMax) * 100)}%` }} />
-          </div>
-
-          <div className="prompt-area">
-            <h2 className="prompt-text">{today.prompt.text}</h2>
-            {today.prompt.hint && <p className="prompt-hint">{today.prompt.hint}</p>}
-          </div>
-
-          <form onSubmit={send} className="input-form">
-            <input
-              ref={inputRef}
-              className={`input-box ${wrong ? "is-wrong" : ""} ${suggestion ? "is-suggest" : ""} ${shaking ? "is-shaking" : ""}`}
-              value={input}
-              onChange={(e) => { setInput(e.target.value); setWrong(false); setSuggestion(null); setMsg(null); }}
-              onAnimationEnd={() => setShaking(false)}
-              autoComplete="off"
-              autoCapitalize="off"
-              placeholder="Type an answer..."
-            />
-          </form>
-
-          <div className="feedback-area" aria-live="polite">
-            <span className={`msg-text ${msg?.ok ? "msg-ok" : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
-          </div>
-
-          <div className="answers-header"><span className="answers-count"><b>{s.valid}</b> accepted</span></div>
-          <ul className="chips">
-            {answers.map((a) => <li key={a} className="chip-item pop-in">{a}</li>)}
-          </ul>
         </section>
       )}
 
