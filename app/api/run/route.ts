@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { promptForDate, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
 import { ensureAnswerList } from "@/lib/learned";
-import { finalizeIfDead } from "@/lib/run";
+import { finalizeIfDead, runTime } from "@/lib/run";
 import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 
@@ -18,5 +18,5 @@ export async function POST() {
     session.startedAt = Date.now();
     await store.saveSession(session);
   }
-  return NextResponse.json({ elapsedMs: Date.now() - session.startedAt, events: session.events });
+  return NextResponse.json({ elapsedMs: runTime(session), events: session.events });
 }

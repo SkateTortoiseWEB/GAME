@@ -67,6 +67,8 @@ export default function Game() {
   const [board, setBoard] = useState<{ entries: Entry[]; you: Entry | null } | null>(null);
   const [scope, setScope] = useState<"daily" | "all">("daily");
   const anchor = useRef(0); // Date.now() minus elapsed run time
+  // Set while an answer is out for checking. The clock is held still, mirroring the server, which stops it for AI checks.
+  const frozenAt = useRef<number | null>(null);
   const eventsRef = useRef<RunEvent[]>([]);
   const finishing = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -117,6 +119,7 @@ export default function Game() {
   useEffect(() => {
     if (phase !== "playing") return;
     const timer = setInterval(() => {
+      if (frozenAt.current !== null) return; // a check is in flight: nothing moves
       const now = Date.now() - anchor.current;
       setT(now);
       if (deathTime(eventsRef.current) <= now) finish();
@@ -174,9 +177,17 @@ export default function Game() {
     }, SLOW_CHECK_MS);
     queue.current = queue.current.then(async () => {
       const prevLeft = deathTime(eventsRef.current) - (Date.now() - anchor.current);
-      const r = await post("/api/answer", { answer: text });
+      frozenAt.current = Date.now();
+      let r;
+      try {
+        r = await post("/api/answer", { answer: text });
+      } catch {
+        r = { status: "error", detail: "no connection" };
+      }
       clearTimeout(slowTimer);
       setSlowCheck(false);
+      if (!r.events && frozenAt.current !== null) anchor.current += Date.now() - frozenAt.current; // no server clock: resume where we froze
+      frozenAt.current = null;
       if (r.events) {
         applyServerState(r.events, r.elapsedMs);
         const change = (deathTime(r.events) - r.elapsedMs) - prevLeft;

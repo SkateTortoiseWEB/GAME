@@ -11,6 +11,10 @@ There is no start button: opening the page shows a 3-second "get ready" countdow
 catches you the game-over screen shows your result, your answers, the leaderboard, and a countdown to tomorrow's prompt
 (midnight UTC), after which the page reloads into the new day.
 
+The clock stops, silently, while the AI is being asked: the server records how long each AI check took (`pausedMs`,
+`runTime` in `lib/run.ts`), so the magma does not rise and the countdown does not move during one. Answers found on the
+list or in the cache never pause anything, and a slow or failed AI call never costs the player any magma.
+
 The rules live in `lib/magma.ts` (start height, stone height, rise speed, acceleration, surge size). They are tuned so a
 clean 21-answers-a-minute player lasts about 3 minutes. The server decides when you are caught from the recorded
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.

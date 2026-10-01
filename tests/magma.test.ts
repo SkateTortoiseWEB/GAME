@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deathTime, MAGMA, riseTime, magmaRise, stateAt, type RunEvent } from "@/lib/magma";
-import { finalizeIfDead, standingFor } from "@/lib/run";
+import { addPause, finalizeIfDead, MAX_PAUSE_MS, runTime, standingFor } from "@/lib/run";
+import { judgeAnswer } from "@/lib/judge";
+import { getPrompt } from "@/lib/prompts";
+import type { Session } from "@/lib/store";
 import { getStore } from "@/lib/store";
 import { computeStreak } from "@/lib/streak";
 
@@ -68,14 +71,14 @@ describe("finalizing a run (in-memory store)", () => {
   beforeEach(() => { (globalThis as { __store?: unknown }).__store = undefined; });
 
   it("does nothing while the player is alive or hasn't started", async () => {
-    const mk = (startedAt: number | null) => ({ date, deviceId: "d".repeat(20), startedAt, events: [], submitted: false });
+    const mk = (startedAt: number | null): Session => ({ date, deviceId: "d".repeat(20), startedAt, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false });
     expect(await finalizeIfDead(mk(null))).toBeNull();
     expect(await finalizeIfDead(mk(Date.now()))).toBeNull();
   });
 
   it("records the score once when the magma has already won, even if the tab was closed", async () => {
     const events: RunEvent[] = [{ t: 3000, kind: "valid", answer: "a" }, { t: 6000, kind: "valid", answer: "b" }];
-    const session = { date, deviceId: "p".repeat(20), startedAt: Date.now() - 10 * 60000, events, submitted: false };
+    const session: Session = { date, deviceId: "p".repeat(20), startedAt: Date.now() - 10 * 60000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events, submitted: false };
     const first = await finalizeIfDead(session);
     expect(first).toMatchObject({ total: 2 });
     expect(first!.survivedMs).toBeCloseTo(deathTime(events), -1);
@@ -104,5 +107,78 @@ describe("finalizing a run (in-memory store)", () => {
 describe("streak (unchanged)", () => {
   it("still counts consecutive days", () => {
     expect(computeStreak(["2026-10-01", "2026-09-30"], "2026-10-01").current).toBe(2);
+  });
+});
+
+describe("the clock stops while the AI is being asked", () => {
+  const base = (over: Partial<Session> = {}): Session => ({
+    date: "2026-10-01", deviceId: "c".repeat(20), startedAt: 1_000_000, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false, ...over,
+  });
+
+  it("run time is wall time minus the time spent waiting on the AI", () => {
+    expect(runTime(base(), 1_030_000)).toBe(30_000);
+    expect(runTime(base({ pausedMs: 4_000 }), 1_030_000)).toBe(26_000);
+  });
+
+  it("an AI check still in flight already holds the clock", () => {
+    const s = base({ pausedSince: 1_020_000 });
+    expect(runTime(s, 1_020_000)).toBe(20_000);
+    expect(runTime(s, 1_025_000)).toBe(20_000); // 5s later, still frozen
+  });
+
+  it("a stuck check cannot freeze the clock forever", () => {
+    const s = base({ pausedSince: 1_010_000 });
+    expect(runTime(s, 1_010_000 + 120_000)).toBe(10_000 + 120_000 - MAX_PAUSE_MS);
+  });
+
+  it("addPause counts each check once, even when checks overlap", () => {
+    const s = base({ pausedSince: 1_000_000 });
+    addPause(s, 1_000_000, 1_003_000); // 3s
+    expect(s).toMatchObject({ pausedMs: 3000, pausedSince: null, pauseEnd: 1_003_000 });
+    addPause(s, 1_001_000, 1_004_000); // overlaps the first by 2s, so only 1s is new
+    expect(s.pausedMs).toBe(4000);
+    addPause(s, 1_000_500, 1_002_000); // entirely inside what is already counted
+    expect(s.pausedMs).toBe(4000);
+    addPause(s, 1_010_000, 1_090_000); // an absurdly long one is capped
+    expect(s.pausedMs).toBe(4000 + MAX_PAUSE_MS);
+  });
+
+  it("a player is not caught while their time went on waiting for the AI", async () => {
+    (globalThis as { __store?: unknown }).__store = undefined;
+    const idle = Math.floor(deathTime([]));
+    const now = 5_000_000;
+    // 60s of wall time with no answers would be fatal (~46s), but 30s of it was spent waiting on the AI.
+    const s = base({ startedAt: now - idle - 15_000, pausedMs: 30_000 });
+    expect(await finalizeIfDead(s, now)).toBeNull();
+    const dead = base({ startedAt: now - idle - 15_000, pausedMs: 0 });
+    expect(await finalizeIfDead(dead, now)).not.toBeNull();
+  });
+
+  it("the judge only stops the clock when it really asks the AI", async () => {
+    (globalThis as { __store?: unknown }).__store = undefined;
+    process.env.LLM_API_KEY = "test";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ valid: true, canonical: "Echidna", rarity: 0 }) } }] })));
+    vi.stubGlobal("fetch", fetchMock);
+    const hooks = { beforeAi: vi.fn(async () => {}), afterAi: vi.fn(async () => {}) };
+    const animals = getPrompt("animals:e")!;
+
+    await judgeAnswer(animals, "eagle", hooks); // on the seed list
+    expect(hooks.beforeAi).not.toHaveBeenCalled();
+
+    await judgeAnswer(animals, "echidna", hooks); // off the list: goes to the AI
+    expect(hooks.beforeAi).toHaveBeenCalledTimes(1);
+    expect(hooks.afterAi).toHaveBeenCalledTimes(1);
+
+    await judgeAnswer(animals, "Echidna", hooks); // now cached: no AI, no pause
+    expect(hooks.beforeAi).toHaveBeenCalledTimes(1);
+
+    // Even a failed check releases the clock.
+    fetchMock.mockRejectedValue(new Error("down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await judgeAnswer(animals, "emu-ish", hooks);
+    expect(hooks.beforeAi).toHaveBeenCalledTimes(2);
+    expect(hooks.afterAi).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+    delete process.env.LLM_API_KEY;
   });
 });

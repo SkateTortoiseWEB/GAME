@@ -14,13 +14,19 @@ export type JudgeResult =
   | { status: "invalid" }
   | { status: "error"; reason: string };
 
+/** Called around the one slow step, the AI check, so the caller can stop the clock while it runs. */
+export interface AiHooks {
+  beforeAi?: () => Promise<void>;
+  afterAi?: () => Promise<void>;
+}
+
 const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || startsWithLetter(text, prompt.letter);
 
 /**
  * Hybrid check: pre-generated/seed list -> verdict cache -> LLM (cached, so each answer is judged once).
  * Corrections (typos fixed by fuzzy match or the LLM) are only ever suggested, never auto-accepted.
  */
-export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<JudgeResult> {
+export async function judgeAnswer(basePrompt: PromptDef, raw: string, hooks?: AiHooks): Promise<JudgeResult> {
   const prompt = await withLearnedAnswers(basePrompt);
   const answer = raw.trim().slice(0, 60);
   const norm = normalize(answer);
@@ -40,7 +46,13 @@ export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<J
   const cached = await store.getVerdict(prompt.id, norm);
   if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, cached.rarity ?? 0, "cache");
 
-  const res = await judgeWithLlm(prompt.text, answer);
+  await hooks?.beforeAi?.();
+  let res;
+  try {
+    res = await judgeWithLlm(prompt.text, answer);
+  } finally {
+    await hooks?.afterAi?.();
+  }
   if (!res.ok) return { status: "error", reason: res.reason };
   const verdict = res.verdict;
   const ok = verdict.valid && !!verdict.canonical && startsRight(prompt, verdict.canonical);

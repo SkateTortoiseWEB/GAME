@@ -10,6 +10,12 @@ export interface Session {
   deviceId: string;
   /** Epoch ms when the run started; null until the player presses start. */
   startedAt: number | null;
+  /** Total ms the clock has been stopped while the AI was being asked (see lib/run.ts). */
+  pausedMs: number;
+  /** Epoch ms an AI check is in flight since, or null. The clock is stopped while this is set. */
+  pausedSince: number | null;
+  /** Epoch ms the latest counted pause ended, so overlapping checks aren't double-counted. */
+  pauseEnd: number;
   /** Answer events, sorted by time. */
   events: RunEvent[];
   submitted: boolean;
@@ -175,12 +181,16 @@ class SupabaseStore implements Store {
     const { data } = await this.db.from("sessions").select("run, submitted")
       .eq("date", date).eq("device_id", deviceId).maybeSingle();
     if (!data) return null;
-    const run = data.run as { startedAt: number | null; events: RunEvent[] };
-    return { date, deviceId, startedAt: run.startedAt, events: run.events, submitted: data.submitted as boolean };
+    const run = data.run as { startedAt: number | null; events: RunEvent[]; pausedMs?: number; pausedSince?: number | null; pauseEnd?: number };
+    return {
+      date, deviceId, startedAt: run.startedAt, events: run.events, submitted: data.submitted as boolean,
+      pausedMs: run.pausedMs ?? 0, pausedSince: run.pausedSince ?? null, pauseEnd: run.pauseEnd ?? 0,
+    };
   }
   async saveSession(s: Session) {
     await this.db.from("sessions").upsert({
-      date: s.date, device_id: s.deviceId, run: { startedAt: s.startedAt, events: s.events }, submitted: s.submitted,
+      date: s.date, device_id: s.deviceId, run: { startedAt: s.startedAt, events: s.events, pausedMs: s.pausedMs, pausedSince: s.pausedSince, pauseEnd: s.pauseEnd },
+      submitted: s.submitted,
     });
   }
   async getScore(date: string, deviceId: string) {

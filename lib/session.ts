@@ -12,5 +12,5 @@ export function anonLabel(deviceId: string): string {
 export async function loadSession(date: string, deviceId: string): Promise<Session> {
   const existing = await getStore().getSession(date, deviceId);
   if (existing) return existing;
-  return { date, deviceId, startedAt: null, events: [], submitted: false };
+  return { date, deviceId, startedAt: null, pausedMs: 0, pausedSince: null, pauseEnd: 0, events: [], submitted: false };
 }

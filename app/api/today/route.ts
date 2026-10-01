@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { promptForDate, todayKey } from "@/lib/daily";
 import { getDeviceId } from "@/lib/identity";
 import { ensureAnswerList } from "@/lib/learned";
-import { finalizeIfDead, standingFor } from "@/lib/run";
+import { finalizeIfDead, runTime, standingFor } from "@/lib/run";
 import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
 import { computeStreak } from "@/lib/streak";
@@ -25,7 +25,7 @@ export async function GET() {
     prompt: { id, text, hint },
     streak: computeStreak(dates, date),
     started: session.startedAt !== null,
-    elapsedMs: session.startedAt === null ? 0 : Date.now() - session.startedAt,
+    elapsedMs: runTime(session),
     events: session.events,
     result: score ? { total: score.total, survivedMs: score.survivedMs, standing: await standingFor(score) } : null,
   });
