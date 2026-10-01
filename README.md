@@ -18,8 +18,7 @@ there. The menu, get-ready screen, run HUD and results (`app/Sheets.tsx`) are pa
 changing page. Out of a run Cinder stands on a short tower in the space below the open panel; in the results the lava has risen to Cinder. The URL
 only says which question is open: `/` is Today's Question, `/play/<genre>` an extra.
 
-There is no start button: opening a question shows a 3-second "get ready" countdown and then the run begins by itself
-(the server clock only starts after that, so closing the tab during the countdown costs nothing). When the magma
+A first-time visitor sees a welcome popup (remembered in `localStorage` as `pw-welcome`). Opening a question then shows it with a Start button; nothing begins by itself, and the server clock only starts when Start is pressed. When the magma
 catches you the game-over screen shows your result, your answers, the leaderboard, and a countdown to tomorrow's prompt
 (midnight UTC), after which the page reloads into the new day.
 
