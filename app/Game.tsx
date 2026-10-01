@@ -41,6 +41,10 @@ const hms = (ms: number) => {
   return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
 };
 
+const RARITY_LABEL = ["", "RARE", "ULTRA RARE", "INSANELY RARE"];
+/** Shorter than this and the answer was checked locally, so there is nothing to show. */
+const SLOW_CHECK_MS = 150;
+
 const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 export default function Game() {
@@ -49,7 +53,8 @@ export default function Game() {
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [t, setT] = useState(0); // ms since the run started, per the server's clock
   const [result, setResult] = useState<Result | null>(null);
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean; tier?: number; checking?: boolean } | null>(null);
+  const [slowCheck, setSlowCheck] = useState(false);
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
   const [wrong, setWrong] = useState(false);
@@ -162,9 +167,16 @@ export default function Game() {
     const text = suggestion ?? input.trim();
     if (!text || phase !== "playing" || checking) return;
     setChecking(true);
+    // Only if the check takes a moment (i.e. it has gone to the AI) does the typed word change colour.
+    const slowTimer = setTimeout(() => {
+      setSlowCheck(true);
+      setMsg({ text: "Checking…", ok: false, checking: true });
+    }, SLOW_CHECK_MS);
     queue.current = queue.current.then(async () => {
       const prevLeft = deathTime(eventsRef.current) - (Date.now() - anchor.current);
       const r = await post("/api/answer", { answer: text });
+      clearTimeout(slowTimer);
+      setSlowCheck(false);
       if (r.events) {
         applyServerState(r.events, r.elapsedMs);
         const change = (deathTime(r.events) - r.elapsedMs) - prevLeft;
@@ -174,7 +186,8 @@ export default function Game() {
       }
       if (r.dead || r.status === "dead") { setChecking(false); finish(); return; }
       if (r.status === "valid") {
-        setMsg({ text: `+1 • ${r.canonical}`, ok: true });
+        const tier: number = r.rarity ?? 0;
+        setMsg({ text: tier > 0 ? `${RARITY_LABEL[tier]} • ${r.canonical}` : `+1 • ${r.canonical}`, ok: true, tier });
         setInput("");
         setWrong(false);
         setSuggestion(null);
@@ -209,7 +222,7 @@ export default function Game() {
   }
 
   const s = stateAt(events, t);
-  const words = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "");
+  const words = events.filter((e) => e.kind === "valid").map((e) => ({ name: e.answer ?? "", rarity: e.rarity ?? 0 }));
   // Time until the magma reaches you if you stopped answering right now.
   const msToDeath = Math.max(0, deathTime(events) - t);
   const secsToDeath = msToDeath / 1000;
@@ -232,8 +245,8 @@ export default function Game() {
           const bottom = FLOOR + (MAGMA.base + i * MAGMA.stone) * UNIT - cam;
           if (!onScreen(bottom)) return null;
           return (
-            <div key={`${i}-${w}`} className="box drop-in" style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
-              <span>{w}</span>
+            <div key={`${i}-${w.name}`} className={`box drop-in r${w.rarity}`} style={{ bottom, height: UNIT, transform: `translateX(${((i * 7) % 5 - 2) * 3}px)` }}>
+              <span>{w.name}</span>
             </div>
           );
         })}
@@ -255,7 +268,7 @@ export default function Game() {
           <form onSubmit={send}>
             <input
               ref={inputRef}
-              className={`input-box ${wrong ? "is-wrong" : ""} ${suggestion ? "is-suggest" : ""} ${shaking ? "is-shaking" : ""}`}
+              className={`input-box ${wrong ? "is-wrong" : ""} ${suggestion ? "is-suggest" : ""} ${slowCheck ? "is-checking" : ""} ${shaking ? "is-shaking" : ""}`}
               value={input}
               onChange={(e) => { setInput(e.target.value); setWrong(false); setSuggestion(null); setMsg(null); }}
               onAnimationEnd={() => setShaking(false)}
@@ -265,7 +278,7 @@ export default function Game() {
             />
           </form>
           <div className="hud-feedback" aria-live="polite">
-            <span className={`msg-text ${msg?.ok ? "msg-ok" : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
+            <span className={`msg-text ${msg?.checking ? "msg-checking" : msg?.ok ? (msg.tier ? `msg-r${msg.tier}` : "msg-ok") : suggestion ? "msg-suggest" : msg ? "msg-bad" : ""}`}>{msg?.text ?? " "}</span>
             <span className="hud-count"><b>{s.valid}</b> accepted</span>
           </div>
         </div>
@@ -299,7 +312,7 @@ export default function Game() {
   }
 
   // phase === "done": the game-over screen.
-  const answersInOrder = events.filter((e) => e.kind === "valid").map((e) => e.answer ?? "");
+  const answersInOrder = events.filter((e) => e.kind === "valid").map((e) => ({ name: e.answer ?? "", rarity: e.rarity ?? 0 }));
   const untilTomorrow = msUntilTomorrow(now);
   const resetLocal = new Date(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1))
     .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -338,7 +351,7 @@ export default function Game() {
             <p className="over-prompt">{today.prompt.text}</p>
             {answersInOrder.length > 0 ? (
               <ul className="chips">
-                {answersInOrder.map((a, i) => <li key={`${i}-${a}`} className="chip-item">{a}</li>)}
+                {answersInOrder.map((a, i) => <li key={`${i}-${a.name}`} className={`chip-item r${a.rarity}`}>{a.name}</li>)}
               </ul>
             ) : <p className="hint">You didn&apos;t get an answer in this time.</p>}
           </section>

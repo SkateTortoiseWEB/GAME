@@ -4,6 +4,7 @@ create table if not exists verdicts (
   norm       text not null,
   valid      boolean not null,
   canonical  text,
+  rarity     smallint not null default 0,
   created_at timestamptz not null default now(),
   primary key (prompt_id, norm)
 );

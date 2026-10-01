@@ -399,3 +399,42 @@ button {
 .over-prompt { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; }
 .over-card .chips { justify-content: center; }
 .over-card .board { text-align: left; }
+
+/* ---- Answer being checked by the AI (only shown when the check takes a moment) ---- */
+:root { --checking: #7fd8ff; }
+.input-box.is-checking { border-color: var(--checking); border-style: dashed; color: var(--checking); animation: checkPulse 0.9s ease-in-out infinite; }
+@keyframes checkPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.msg-checking { color: var(--checking); }
+
+/* ---- Rarity: only rare answers change colour. r1 gold, r2 shiny purple, r3 rainbow. ---- */
+.r1 {
+  background: linear-gradient(180deg, #ffe08a, #d9a21f) !important;
+  border-color: #fff0b8 !important; color: #2b1a00 !important;
+  box-shadow: 0 0 14px rgba(255, 200, 70, 0.55), 0 2px 0 #7a5400 !important;
+}
+.r2 {
+  overflow: hidden;
+  background: linear-gradient(180deg, #a56bff, #5a22c9) !important;
+  border-color: #d8bcff !important; color: #fff !important;
+  box-shadow: 0 0 18px rgba(160, 90, 255, 0.75), 0 2px 0 #2c0f6b !important;
+}
+.r2::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: sheen 2.2s ease-in-out infinite;
+}
+.r3 {
+  background: linear-gradient(90deg, #ff3b3b, #ff9d00, #ffe600, #3bd13b, #1fb6ff, #7a3bff, #ff3bd0, #ff3b3b) !important;
+  background-size: 300% 100% !important;
+  border-color: #fff !important; color: #fff !important; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.55), 0 0 36px rgba(255, 120, 255, 0.45) !important;
+  animation: rainbow 3s linear infinite;
+}
+@keyframes sheen { 0% { left: -60%; } 60%, 100% { left: 130%; } }
+@keyframes rainbow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+.chip-item.r1, .chip-item.r2, .chip-item.r3 { font-weight: 700; }
+.chip-item.r2 { position: relative; overflow: hidden; }
+.msg-r1 { color: #ffd45e; font-weight: 800; }
+.msg-r2 { color: #c9a0ff; font-weight: 800; }
+.msg-r3 { font-weight: 800; background: linear-gradient(90deg, #ff3b3b, #ffe600, #3bd13b, #1fb6ff, #ff3bd0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (prefers-reduced-motion: reduce) { .r2::after, .r3, .input-box.is-checking { animation: none; } }

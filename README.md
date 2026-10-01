@@ -15,6 +15,13 @@ The rules live in `lib/magma.ts` (start height, stone height, rise speed, accele
 clean 21-answers-a-minute player lasts about 3 minutes. The server decides when you are caught from the recorded
 answer times, so the client only draws the scene. A run you abandon still ends on schedule.
 
+## Rarity colours
+Accepted answers are graded 0-3 for how niche they are, by the same LLM calls that already happen (no extra calls):
+the pre-generated list arrives sorted into common / rare / ultra / insane tiers, and a per-answer check returns a
+grade too. Common answers stay plain; rare blocks turn gold, ultra rare shiny purple, insanely rare rainbow. The grade is
+cosmetic: it does not change the score or the magma. The prompt that asks for grades (`RARITY_GUIDE` in `lib/llm.ts`) is
+deliberately stingy (about 70% common, 20% rare, 8% ultra, 2% insane) and is the knob to turn if too many or too few blocks light up.
+
 ## How answers are checked (hybrid)
 0. **Pre-generated list** (`lib/learned.ts`): the first visit of the day triggers one LLM call that builds a long list of valid
    answers for today's prompt (saved in `prompt_lists`, or `.data/lists.json` in dev, and reused whenever that prompt returns).

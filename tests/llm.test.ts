@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { judgeWithLlm } from "@/lib/llm";
 
-const ok = (valid: boolean, canonical: string | null) =>
-  new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ valid, canonical }) } }] }));
+const ok = (valid: boolean, canonical: string | null, rarity?: number) =>
+  new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ valid, canonical, rarity }) } }] }));
 
 describe("judgeWithLlm retries", () => {
   beforeEach(() => { process.env.LLM_API_KEY = "test"; vi.spyOn(console, "error").mockImplementation(() => {}); });
@@ -13,7 +13,7 @@ describe("judgeWithLlm retries", () => {
       .mockRejectedValueOnce(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }))
       .mockResolvedValueOnce(ok(true, "Berlin"));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await judgeWithLlm("Cities", "berlin")).toEqual({ ok: true, verdict: { valid: true, canonical: "Berlin" } });
+    expect(await judgeWithLlm("Cities", "berlin")).toEqual({ ok: true, verdict: { valid: true, canonical: "Berlin", rarity: 0 } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -38,7 +38,29 @@ describe("judgeWithLlm retries", () => {
       .mockResolvedValueOnce(new Response("busy", { status: 503 }))
       .mockResolvedValueOnce(ok(false, null));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await judgeWithLlm("Cities", "xyz")).toEqual({ ok: true, verdict: { valid: false, canonical: null } });
+    expect(await judgeWithLlm("Cities", "xyz")).toEqual({ ok: true, verdict: { valid: false, canonical: null, rarity: 0 } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads and clamps the rarity grade; invalid answers are always 0", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(ok(true, "Bydgoszcz", 2))
+      .mockResolvedValueOnce(ok(true, "Weird", 99))
+      .mockResolvedValueOnce(ok(true, "Odd", -4))
+      .mockResolvedValueOnce(ok(true, "Plain", undefined as unknown as number))
+      .mockResolvedValueOnce(ok(false, null, 3));
+    vi.stubGlobal("fetch", fetchMock);
+    const rarity = async (a: string) => { const r = await judgeWithLlm("Cities", a); return r.ok ? r.verdict.rarity : -1; };
+    expect([await rarity("a"), await rarity("b"), await rarity("c"), await rarity("d"), await rarity("e")]).toEqual([2, 3, 0, 0, 0]);
+  });
+
+  it("tells the model when the answer missed the pre-generated list", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ok(true, "Bruges", 1));
+    vi.stubGlobal("fetch", fetchMock);
+    await judgeWithLlm("Cities", "bruges", true);
+    await judgeWithLlm("Cities", "bruges", false);
+    const sys = (i: number) => JSON.parse(fetchMock.mock.calls[i][1].body).messages[0].content as string;
+    expect(sys(0)).toContain("NOT among the 300 best-known");
+    expect(sys(1)).not.toContain("NOT among the 300 best-known");
   });
 });

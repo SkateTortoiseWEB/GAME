@@ -24,6 +24,8 @@ export interface RunEvent {
   kind: "valid" | "wrong";
   /** Canonical answer, for valid events. */
   answer?: string;
+  /** How niche the answer is: 0 common, 1 rare (gold), 2 ultra rare (purple), 3 insanely rare (rainbow). */
+  rarity?: number;
 }
 
 /** Magma height from time alone (ignoring surges). */

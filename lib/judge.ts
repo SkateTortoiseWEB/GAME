@@ -1,5 +1,5 @@
 import type { PromptDef } from "@/data/prompts";
-import { withLearnedAnswers } from "./learned";
+import { listedRarity, withLearnedAnswers } from "./learned";
 import { judgeWithLlm } from "./llm";
 import { matchList } from "./match";
 import { normalize } from "./normalize";
@@ -7,8 +7,8 @@ import { startsWithLetter } from "./prompts";
 import { getStore } from "./store";
 
 export type JudgeResult =
-  /** Accepted. */
-  | { status: "valid"; canonical: string; source: "list" | "cache" | "llm" }
+  /** Accepted. `rarity`: 0 common, 1 rare, 2 ultra rare, 3 insanely rare. */
+  | { status: "valid"; canonical: string; rarity: number; source: "list" | "cache" | "llm" }
   /** Probably a typo: shown to the player, who must resubmit to accept it. */
   | { status: "suggest"; canonical: string }
   | { status: "invalid" }
@@ -17,11 +17,12 @@ export type JudgeResult =
 const startsRight = (prompt: PromptDef, text: string) => !prompt.letter || startsWithLetter(text, prompt.letter);
 
 /**
- * Hybrid check: curated list -> verdict cache -> LLM (cached, so each answer is judged once).
+ * Hybrid check: pre-generated/seed list -> verdict cache -> LLM (cached, so each answer is judged once).
  * Corrections (typos fixed by fuzzy match or the LLM) are only ever suggested, never auto-accepted.
  */
 export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<JudgeResult> {
   const prompt = await withLearnedAnswers(basePrompt);
+  const hasList = prompt !== basePrompt; // a pre-generated list exists, so off-list answers lean rare
   const answer = raw.trim().slice(0, 60);
   const norm = normalize(answer);
   if (!norm || norm === normalize(prompt.text)) return { status: "invalid" };
@@ -29,7 +30,7 @@ export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<J
   const fromList = matchList(prompt, answer);
   if (fromList) {
     return fromList.exact
-      ? { status: "valid", canonical: fromList.canonical, source: "list" }
+      ? { status: "valid", canonical: fromList.canonical, rarity: listedRarity(prompt.id, fromList.canonical), source: "list" }
       : { status: "suggest", canonical: fromList.canonical };
   }
 
@@ -38,19 +39,20 @@ export async function judgeAnswer(basePrompt: PromptDef, raw: string): Promise<J
 
   const store = getStore();
   const cached = await store.getVerdict(prompt.id, norm);
-  if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, "cache");
+  if (cached) return fromVerdict(prompt, norm, cached.valid, cached.canonical, cached.rarity ?? 0, "cache");
 
-  const res = await judgeWithLlm(prompt.text, answer);
+  const res = await judgeWithLlm(prompt.text, answer, hasList);
   if (!res.ok) return { status: "error", reason: res.reason };
   const verdict = res.verdict;
   const ok = verdict.valid && !!verdict.canonical && startsRight(prompt, verdict.canonical);
   const canonical = ok ? verdict.canonical : null;
-  await store.setVerdict(prompt.id, norm, { valid: ok, canonical });
+  const rarity = ok ? verdict.rarity : 0;
+  await store.setVerdict(prompt.id, norm, { valid: ok, canonical, rarity });
   if (canonical && normalize(canonical) !== norm) {
     // So the suggested spelling is accepted on resubmit without a second LLM call.
-    await store.setVerdict(prompt.id, normalize(canonical), { valid: true, canonical });
+    await store.setVerdict(prompt.id, normalize(canonical), { valid: true, canonical, rarity });
   }
-  return fromVerdict(prompt, norm, ok, canonical, "llm");
+  return fromVerdict(prompt, norm, ok, canonical, rarity, "llm");
 }
 
 function fromVerdict(
@@ -58,11 +60,13 @@ function fromVerdict(
   norm: string,
   valid: boolean,
   canonical: string | null,
+  rarity: number,
   source: "cache" | "llm"
 ): JudgeResult {
   if (!valid || !canonical) return { status: "invalid" };
   if (normalize(canonical) !== norm) return { status: "suggest", canonical };
   // The LLM may have approved something that is on the list under another spelling; dedupe on the list name.
   const listed = matchList(prompt, canonical);
-  return { status: "valid", canonical: listed?.exact ? listed.canonical : canonical, source };
+  if (listed?.exact) return { status: "valid", canonical: listed.canonical, rarity: listedRarity(prompt.id, listed.canonical) || rarity, source };
+  return { status: "valid", canonical, rarity, source };
 }

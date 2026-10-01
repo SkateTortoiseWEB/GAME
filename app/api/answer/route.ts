@@ -40,14 +40,14 @@ export async function POST(req: Request) {
   }
 
   const event: RunEvent = result.status === "valid"
-    ? { t, kind: "valid", answer: result.canonical }
+    ? { t, kind: "valid", answer: result.canonical, rarity: result.rarity }
     : { t, kind: "wrong" };
   fresh.events = [...fresh.events, event].sort((a, b) => a.t - b.t);
   await store.saveSession(fresh);
 
   const dead = !!(await finalizeIfDead(fresh)); // a surge can be fatal
   return reply(
-    result.status === "valid" ? { status: "valid", canonical: result.canonical } : { status: "invalid" },
+    result.status === "valid" ? { status: "valid", canonical: result.canonical, rarity: result.rarity } : { status: "invalid" },
     startedAt, fresh.events, dead,
   );
 }

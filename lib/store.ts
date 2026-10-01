@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { ListEntry } from "./llm";
 import type { RunEvent } from "./magma";
 
 export interface Session {
@@ -33,6 +34,8 @@ export interface BoardEntry {
 export interface Verdict {
   valid: boolean;
   canonical: string | null;
+  /** 0-3; missing on verdicts saved before rarity existed. */
+  rarity?: number;
 }
 
 export interface Store {
@@ -46,8 +49,8 @@ export interface Store {
   /** False when this device already has a score for the date. */
   saveScore(s: ScoreRow): Promise<boolean>;
   /** A prompt's pre-generated answer list (see lib/learned.ts), or null if none has been made yet. */
-  getList(promptId: string): Promise<string[] | null>;
-  setList(promptId: string, answers: string[]): Promise<void>;
+  getList(promptId: string): Promise<ListEntry[] | null>;
+  setList(promptId: string, entries: ListEntry[]): Promise<void>;
   /** How today's finished players compare to a given total. */
   dailyStats(date: string, total: number): Promise<{ below: number; equal: number; count: number }>;
   /** 1-based rank for a device's score on a date (total desc, then survived time desc). */
@@ -66,7 +69,7 @@ class MemoryStore implements Store {
   private persist = process.env.NODE_ENV !== "test";
   private writeTimer: ReturnType<typeof setTimeout> | null = null;
   verdicts = new Map<string, Verdict>(this.load(this.verdictFile));
-  lists = new Map<string, string[]>(this.load(this.listFile));
+  lists = new Map<string, ListEntry[]>(this.load(this.listFile));
 
   private load<T>(file: string): [string, T][] {
     if (!this.persist) return [];
@@ -100,8 +103,8 @@ class MemoryStore implements Store {
     this.save();
   }
   async getList(promptId: string) { return this.lists.get(promptId) ?? null; }
-  async setList(promptId: string, answers: string[]) {
-    this.lists.set(promptId, answers);
+  async setList(promptId: string, entries: ListEntry[]) {
+    this.lists.set(promptId, entries);
     this.save();
   }
   async getSession(d: string, id: string) {
@@ -154,19 +157,19 @@ class SupabaseStore implements Store {
   constructor(private db: SupabaseClient<any>) {}
 
   async getVerdict(promptId: string, norm: string) {
-    const { data } = await this.db.from("verdicts").select("valid, canonical")
+    const { data } = await this.db.from("verdicts").select("valid, canonical, rarity")
       .eq("prompt_id", promptId).eq("norm", norm).maybeSingle();
-    return data ? { valid: data.valid as boolean, canonical: data.canonical as string | null } : null;
+    return data ? { valid: data.valid as boolean, canonical: data.canonical as string | null, rarity: (data.rarity as number | null) ?? 0 } : null;
   }
   async setVerdict(promptId: string, norm: string, v: Verdict) {
-    await this.db.from("verdicts").upsert({ prompt_id: promptId, norm, valid: v.valid, canonical: v.canonical });
+    await this.db.from("verdicts").upsert({ prompt_id: promptId, norm, valid: v.valid, canonical: v.canonical, rarity: v.rarity ?? 0 });
   }
   async getList(promptId: string) {
     const { data } = await this.db.from("prompt_lists").select("answers").eq("prompt_id", promptId).maybeSingle();
-    return data ? (data.answers as string[]) : null;
+    return data ? (data.answers as ListEntry[]) : null;
   }
-  async setList(promptId: string, answers: string[]) {
-    await this.db.from("prompt_lists").upsert({ prompt_id: promptId, answers });
+  async setList(promptId: string, entries: ListEntry[]) {
+    await this.db.from("prompt_lists").upsert({ prompt_id: promptId, answers: entries });
   }
   async getSession(date: string, deviceId: string) {
     const { data } = await this.db.from("sessions").select("run, submitted")
