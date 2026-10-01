@@ -57,8 +57,8 @@ export interface Store {
   getScore(date: string, genre: string, deviceId: string): Promise<ScoreRow | null>;
   /** Every genre's finished score this device has on a date (for the home screen). */
   scoresOn(date: string, deviceId: string): Promise<ScoreRow[]>;
-  /** UTC days this device finished a run in any genre, any order. Drives the streak. */
-  scoreDates(deviceId: string): Promise<string[]>;
+  /** UTC days this device finished a run in the given genre, any order. The streak uses the main question. */
+  scoreDates(deviceId: string, genre: string): Promise<string[]>;
   /** False when this device already has a score for that genre and date. */
   saveScore(s: ScoreRow): Promise<boolean>;
   /** A prompt's pre-generated answer list (see lib/learned.ts), or null if none has been made yet. */
@@ -132,7 +132,7 @@ class MemoryStore implements Store {
   async scoresOn(date: string, deviceId: string) {
     return [...this.scores.values()].filter((s) => s.date === date && s.deviceId === deviceId);
   }
-  async scoreDates(id: string) { return [...this.scores.values()].filter((s) => s.deviceId === id).map((s) => s.date); }
+  async scoreDates(id: string, genre: string) { return [...this.scores.values()].filter((s) => s.deviceId === id && s.genre === genre).map((s) => s.date); }
   async saveScore(s: ScoreRow) {
     const k = `${s.date}:${s.genre}:${s.deviceId}`;
     if (this.scores.has(k)) return false;
@@ -225,9 +225,9 @@ class SupabaseStore implements Store {
     const { data } = await this.db.from("scores").select("date, genre, device_id, handle, total, survived_ms").eq("date", date).eq("device_id", deviceId);
     return (data ?? []).map((r) => this.toScore(r));
   }
-  async scoreDates(deviceId: string) {
+  async scoreDates(deviceId: string, genre: string) {
     const { data } = await this.db.from("scores").select("date")
-      .eq("device_id", deviceId).order("date", { ascending: false }).limit(2000);
+      .eq("device_id", deviceId).eq("genre", genre).order("date", { ascending: false }).limit(2000);
     return (data ?? []).map((r) => r.date as string);
   }
   async saveScore(s: ScoreRow) {

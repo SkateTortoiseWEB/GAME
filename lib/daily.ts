@@ -1,5 +1,5 @@
 import { CATEGORIES, NICHE_PROMPTS, type PromptDef } from "@/data/prompts";
-import { genreById } from "./genres";
+import { EXTRA_GENRES, genreById } from "./genres";
 import { eligibleLetters, letterPrompt } from "./prompts";
 
 export function todayKey(now = new Date()): string {
@@ -24,19 +24,34 @@ function mulberry32(seed: number) {
   };
 }
 
-/**
- * One prompt per genre per day, the same for everyone. Players spend minutes on it, so every candidate must have
- * hundreds of valid answers. In a genre with both kinds, about two days in three it is a "starts with" prompt.
- */
-export function promptForDate(date: string, genreId: string): PromptDef {
-  const genre = genreById(genreId);
-  if (!genre) throw new Error(`unknown genre: ${genreId}`);
-  const rand = mulberry32(hash(`${date}:${genreId}`));
-  const categories = CATEGORIES.filter((c) => genre.categories.includes(c.id));
-  const niche = NICHE_PROMPTS.filter((p) => genre.niche.includes(p.id));
+function pickFrom(date: string, genreId: string, categoryIds: string[], nicheIds: string[], salt: number): PromptDef {
+  const rand = mulberry32(hash(`${date}:${genreId}:${salt}`));
+  const categories = CATEGORIES.filter((c) => categoryIds.includes(c.id));
+  const niche = NICHE_PROMPTS.filter((p) => nicheIds.includes(p.id));
   const useNiche = categories.length === 0 || (niche.length > 0 && rand() < 0.4);
   if (useNiche) return niche[Math.floor(rand() * niche.length)];
   const cat = categories[Math.floor(rand() * categories.length)];
   const letters = eligibleLetters(cat);
   return letterPrompt(cat, letters[Math.floor(rand() * letters.length)]);
+}
+
+/**
+ * One prompt per genre per day, the same for everyone. Players spend minutes on it, so every candidate must have
+ * hundreds of valid answers. In a genre with both kinds, about two days in three it is a "starts with" prompt.
+ * The main question draws from every genre's pool, and never repeats an extra's prompt of the same day.
+ */
+export function promptForDate(date: string, genreId: string): PromptDef {
+  const genre = genreById(genreId);
+  if (!genre) throw new Error(`unknown genre: ${genreId}`);
+  if (!genre.main) return pickFrom(date, genreId, genre.categories, genre.niche, 0);
+
+  const extras = EXTRA_GENRES;
+  const taken = new Set(extras.map((g) => promptForDate(date, g.id).id));
+  const categories = extras.flatMap((g) => g.categories);
+  const niche = extras.flatMap((g) => g.niche);
+  for (let salt = 0; salt < 20; salt++) {
+    const p = pickFrom(date, genreId, categories, niche, salt);
+    if (!taken.has(p.id)) return p;
+  }
+  return pickFrom(date, genreId, categories, niche, 0);
 }

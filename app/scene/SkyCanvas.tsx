@@ -90,7 +90,7 @@ export default function SkyCanvas({ stateRef }: { stateRef?: React.MutableRefObj
       const st = stateRef?.current;
       const cam = st?.cam ?? 0;
       const dread = st?.dread ?? 0;
-      const shift = cam * 0.22;
+      const shift = Math.max(0, cam) * 0.22;
 
       ctx.fillStyle = "#0e0d12"; // a flat, near-black night: the stars do the work
       ctx.fillRect(0, 0, W, H);

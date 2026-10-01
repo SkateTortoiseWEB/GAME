@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CATEGORIES, NICHE_PROMPTS } from "@/data/prompts";
 import { promptForDate } from "@/lib/daily";
-import { GENRES, genreById, isGenre } from "@/lib/genres";
+import { EXTRA_GENRES, GENRES, MAIN_GENRE_ID, genreById, isGenre } from "@/lib/genres";
 import { finalizeIfDead } from "@/lib/run";
 import { loadSession } from "@/lib/session";
 import { getStore } from "@/lib/store";
@@ -12,7 +12,7 @@ describe("genre definitions", () => {
     const cats = new Set(CATEGORIES.map((c) => c.id));
     const niche = new Set(NICHE_PROMPTS.map((p) => p.id));
     const seen = new Set<string>();
-    for (const g of GENRES) {
+    for (const g of EXTRA_GENRES) {
       expect(g.categories.length + g.niche.length, g.id).toBeGreaterThan(3);
       for (const c of g.categories) { expect(cats.has(c), `${g.id}:${c}`).toBe(true); expect(seen.has(c), c).toBe(false); seen.add(c); }
       for (const n of g.niche) { expect(niche.has(n), `${g.id}:${n}`).toBe(true); expect(seen.has(n), n).toBe(false); seen.add(n); }
@@ -20,9 +20,16 @@ describe("genre definitions", () => {
   });
 
   it("every category and niche prompt belongs to a genre, so none is wasted", () => {
-    const used = new Set(GENRES.flatMap((g) => [...g.categories, ...g.niche]));
+    const used = new Set(EXTRA_GENRES.flatMap((g) => [...g.categories, ...g.niche]));
     for (const c of CATEGORIES) expect(used.has(c.id), c.id).toBe(true);
     for (const p of NICHE_PROMPTS) expect(used.has(p.id), p.id).toBe(true);
+  });
+
+  it("has exactly one main question, listed first, which is not an extra", () => {
+    expect(GENRES.filter((g) => g.main).map((g) => g.id)).toEqual([MAIN_GENRE_ID]);
+    expect(GENRES[0].id).toBe(MAIN_GENRE_ID);
+    expect(EXTRA_GENRES.map((g) => g.id)).not.toContain(MAIN_GENRE_ID);
+    expect(EXTRA_GENRES).toHaveLength(6);
   });
 
   it("validates genre ids", () => {
@@ -40,12 +47,25 @@ describe("one prompt per genre per day", () => {
     const date = "2026-10-01";
     const ids = GENRES.map((g) => promptForDate(date, g.id).id);
     expect(GENRES.map((g) => promptForDate(date, g.id).id)).toEqual(ids);
-    expect(new Set(ids).size).toBe(GENRES.length);
-    for (const g of GENRES) {
+    expect(new Set(ids).size).toBe(GENRES.length); // the main question never repeats an extra's prompt
+    for (const g of EXTRA_GENRES) {
       const p = promptForDate(date, g.id);
       const base = p.id.split(":")[0];
       expect([...g.categories, ...g.niche], `${g.id} -> ${p.id}`).toContain(base);
     }
+  });
+
+  it("the main question draws from every genre's pool and never clashes with an extra", () => {
+    const pool = new Set(EXTRA_GENRES.flatMap((g) => [...g.categories, ...g.niche]));
+    const sources = new Set<string>();
+    for (let i = 1; i <= 60; i++) {
+      const date = `2026-12-${String(i % 28 + 1).padStart(2, "0")}-x`.slice(0, 10);
+      const main = promptForDate(date, MAIN_GENRE_ID);
+      expect(pool.has(main.id.split(":")[0]), main.id).toBe(true);
+      expect(EXTRA_GENRES.map((g) => promptForDate(date, g.id).id)).not.toContain(main.id);
+      sources.add(EXTRA_GENRES.find((g) => [...g.categories, ...g.niche].includes(main.id.split(":")[0]))!.id);
+    }
+    expect(sources.size).toBeGreaterThanOrEqual(4); // it really is a mix, not stuck on one genre
   });
 
   it("every genre gives plenty of variety over a month", () => {
@@ -93,10 +113,16 @@ describe("runs, scores and rankings are per genre", () => {
     expect(await store.dailyStats(date, "nature", 5)).toEqual({ below: 0, equal: 1, count: 2 });
   });
 
-  it("the streak counts a day if any genre was finished", async () => {
+  it("only the main question counts towards the streak; extras are optional", async () => {
     const store = getStore();
-    await store.saveScore({ date: "2026-09-30", genre: "nature", deviceId: dev, handle: "G", total: 1, survivedMs: 1 });
-    await store.saveScore({ date, genre: "music", deviceId: dev, handle: "G", total: 1, survivedMs: 1 });
-    expect(computeStreak(await store.scoreDates(dev), date).current).toBe(2);
+    await store.saveScore({ date: "2026-09-30", genre: MAIN_GENRE_ID, deviceId: dev, handle: "G", total: 1, survivedMs: 1 });
+    await store.saveScore({ date, genre: MAIN_GENRE_ID, deviceId: dev, handle: "G", total: 1, survivedMs: 1 });
+    await store.saveScore({ date: "2026-09-29", genre: "music", deviceId: dev, handle: "G", total: 5, survivedMs: 1 }); // an extra
+    expect(computeStreak(await store.scoreDates(dev, MAIN_GENRE_ID), date).current).toBe(2);
+    expect(await store.scoreDates(dev, "music")).toEqual(["2026-09-29"]);
+    // playing only extras does not build a streak
+    const other = "o".repeat(20);
+    await store.saveScore({ date, genre: "music", deviceId: other, handle: "O", total: 3, survivedMs: 1 });
+    expect(computeStreak(await store.scoreDates(other, MAIN_GENRE_ID), date).current).toBe(0);
   });
 });

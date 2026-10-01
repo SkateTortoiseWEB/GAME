@@ -1,16 +1,24 @@
 # Pawmpeii
 
-A daily word game with six **genres** (Animals & Nature, Places, Movies & TV, Music, Words & Names, Everything Else).
-Every genre has its own prompt each day, the same for everyone, and one run per genre per day. Name as many valid answers as you can while
-magma rises. Each accepted answer adds a stone to your stack. A wrong answer makes the magma surge (typo suggestions and duplicates cost
-nothing). The magma speeds up the longer you last, so nobody survives forever. Once it catches you, that genre is over for the day. Score =
-accepted answers, ties broken by survival time. Each genre has its own daily and all-time leaderboard and its own "you outlasted X% of
-players" (rank until 20 players have finished). The streak counts a day if you finish a run in any genre.
+A daily word game. The app opens on **Today's Question**, the main game: one broad question a day, the same for everyone, drawn from every
+genre's pool, with the leaderboard that matters and the only streak. Six optional **extras** (Animals & Nature, Places, Movies & TV, Music,
+Words & Names, Everything Else) each have their own question, run and leaderboard every day, but never affect the streak.
 
-Genres live in `lib/genres.ts`: each lists the categories (which spawn "X that start with Y" prompts) and niche prompts it draws from,
-and `promptForDate(date, genre)` picks one deterministically. Every prompt must have hundreds of valid answers.
+Name as many valid answers as you can while lava rises. Each accepted answer adds a block to Cinder's tower. A wrong answer makes the lava surge
+(typo suggestions and duplicates cost nothing). The lava speeds up the longer you last, so nobody survives forever. Once it catches Cinder, that
+question is over for the day. Score = accepted answers, ties broken by survival time. Each question has its own daily and all-time leaderboard and
+its own "you outlasted X% of players" (rank until 20 players have finished).
 
-There is no start button inside a genre: tapping a genre card on the home screen opens `/play/<genre>`, which shows a 3-second "get ready" countdown and then the run begins by itself
+Genres live in `lib/genres.ts`: the main question (`general`) has no pool of its own, it picks from all the extras' pools and never repeats an
+extra's prompt of the same day; each extra lists the categories (which spawn "X that start with Y" prompts) and niche prompts it draws from.
+`promptForDate(date, genre)` picks deterministically. Every prompt must have hundreds of valid answers.
+
+**One world, panels on top.** `app/App.tsx` is mounted once in the root layout and never unmounts: the night sky, tower, Cinder and lava are always
+there. The menu, get-ready screen, run HUD and results (`app/Sheets.tsx`) are panels over that world, so moving between them never feels like
+changing page. Out of a run Cinder stands on a short tower in the space below the open panel; in the results the lava has risen to Cinder. The URL
+only says which question is open: `/` is Today's Question, `/play/<genre>` an extra.
+
+There is no start button: opening a question shows a 3-second "get ready" countdown and then the run begins by itself
 (the server clock only starts after that, so closing the tab during the countdown costs nothing). When the magma
 catches you the game-over screen shows your result, your answers, the leaderboard, and a countdown to tomorrow's prompt
 (midnight UTC), after which the page reloads into the new day.
@@ -43,9 +51,8 @@ least 3:1 against their backgrounds. Things to keep out when changing it: gradie
 above headlines, scroll-triggered fade-ins, hover effects that fade, and em dashes in copy. The only gradients are gameplay colours (the gold,
 purple and rainbow rarity blocks) and the scrim behind the timer.
 
-The home screen shows every genre at once with no scrolling at any screen size: each card has the genre, today's question and its status,
-and the next unplayed genre is outlined. After a run, the game-over screen suggests the next unplayed genre. The first visit to a genre shows
-the full rules; later visits show a one-liner. Opening the home screen also builds all the answer lists in the background.
+The menu shows Today's Question and the extras with their status, without scrolling at normal screen sizes. After a run, the results panel lists
+what is left to play. The first visit shows the full rules; later visits show a one-liner. Opening the app also builds all the answer lists in the background.
 
 ## Cinder the panda
 The mascot is a sprite sheet in `design/cinder-sprite-sheet.jpg`; `scripts/slice-panda.py` cuts it into one transparent PNG per pose in
